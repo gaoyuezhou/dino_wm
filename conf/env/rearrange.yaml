@@ -1,0 +1,16 @@
+name: rearrange
+args: []
+kwargs: {}
+
+dataset:
+  _target_: "datasets.rearrange_dset.load_rearrange_slice_train_val"
+  n_rollout: 200
+  normalize_action: ${normalize_action}
+  data_path: ${oc.env:DATASET_DIR}/rearrange_1k
+  split_ratio: 0.9
+  transform:
+    _target_: "datasets.img_transforms.default_transform"
+    img_size: ${img_size}
+
+decoder_path: null
+num_workers: 4
