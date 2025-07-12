@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -12,7 +13,7 @@ from .traj_dset import TrajDataset, get_train_val_sliced, TrajSlicerDataset
 class RearrangeDataset(TrajDataset):
     def __init__(
         self,
-        data_path: str = "/Users/julianquast/Documents/Bachelor Thesis/Datasets/rearrange_1k",
+        data_path: str = str(Path(os.getenv("DATASET_DIR", "data")) / "rearrange_1k"),
         n_rollout: Optional[int] = None,
         transform: Optional[Callable] = None,
         normalize_action: bool = False,
@@ -99,7 +100,7 @@ class RearrangeDataset(TrajDataset):
 def load_rearrange_slice_train_val(
     transform,
     n_rollout=50,
-    data_path="/Users/julianquast/Documents/Bachelor Thesis/Datasets/rearrange_1k",
+    data_path=str(Path(os.getenv("DATASET_DIR", "data")) / "rearrange_1k"),
     normalize_action=False,
     split_ratio=0.8,
     num_hist=0,
