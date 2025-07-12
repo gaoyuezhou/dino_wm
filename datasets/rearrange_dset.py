@@ -12,7 +12,7 @@ from .traj_dset import TrajDataset, get_train_val_sliced, TrajSlicerDataset
 class RearrangeDataset(TrajDataset):
     def __init__(
         self,
-        data_path: str = "data/rearrange_1k",
+        data_path: str = "/Users/julianquast/Documents/Bachelor Thesis/Datasets/rearrange_1k",
         n_rollout: Optional[int] = None,
         transform: Optional[Callable] = None,
         normalize_action: bool = False,
@@ -40,7 +40,9 @@ class RearrangeDataset(TrajDataset):
             self.obs_paths.append(ep_dir / "obs.npy")
 
         if len(self.actions) > 0:
-            self.action_dim = self.actions[0].shape[-1] if self.actions[0].ndim > 1 else 1
+            self.action_dim = (
+                self.actions[0].shape[-1] if self.actions[0].ndim > 1 else 1
+            )
         else:
             self.action_dim = 0
         self.state_dim = 1
@@ -97,7 +99,7 @@ class RearrangeDataset(TrajDataset):
 def load_rearrange_slice_train_val(
     transform,
     n_rollout=50,
-    data_path="data/rearrange_1k",
+    data_path="/Users/julianquast/Documents/Bachelor Thesis/Datasets/rearrange_1k",
     normalize_action=False,
     split_ratio=0.8,
     num_hist=0,
