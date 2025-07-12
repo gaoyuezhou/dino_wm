@@ -60,23 +60,25 @@ class TrajSlicerDataset(TrajDataset):
     ):
         self.dataset = dataset
         self.num_frames = num_frames
+        # treat frameskip=0 as no skipping
         self.frameskip = frameskip
+        self.step = max(frameskip, 1)
         self.slices = []
-        for i in range(len(self.dataset)): 
+        for i in range(len(self.dataset)):
             T = self.dataset.get_seq_length(i)
             if T - num_frames < 0:
                 print(f"Ignored short sequence #{i}: len={T}, num_frames={num_frames}")
             else:
                 self.slices += [
-                    (i, start, start + num_frames * self.frameskip)
-                    for start in range(T - num_frames * frameskip + 1)
+                    (i, start, start + num_frames * self.step)
+                    for start in range(T - num_frames * self.step + 1)
                 ]  # slice indices follow convention [start, end)
         # randomly permute the slices
         self.slices = np.random.permutation(self.slices)
         
         self.proprio_dim = self.dataset.proprio_dim
         if process_actions == "concat":
-            self.action_dim = self.dataset.action_dim * self.frameskip
+            self.action_dim = self.dataset.action_dim * max(self.frameskip, 1)
         else:
             self.action_dim = self.dataset.action_dim
 
@@ -93,10 +95,12 @@ class TrajSlicerDataset(TrajDataset):
         i, start, end = self.slices[idx]
         obs, act, state, _ = self.dataset[i]
         for k, v in obs.items():
-            obs[k] = v[start:end:self.frameskip]
-        state = state[start:end:self.frameskip]
+            obs[k] = v[start:end:self.step]
+        state = state[start:end:self.step]
         act = act[start:end]
-        act = rearrange(act, "(n f) d -> n (f d)", n=self.num_frames)  # concat actions
+        act = rearrange(
+            act, "(n f) d -> n (f d)", n=self.num_frames, f=max(self.frameskip, 1)
+        )  # concat actions
         return tuple([obs, act, state])
 
 
