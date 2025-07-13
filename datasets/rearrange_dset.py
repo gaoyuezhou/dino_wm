@@ -102,9 +102,9 @@ def load_rearrange_slice_train_val(
     n_rollout=50,
     data_path=str(Path(os.getenv("DATASET_DIR", "data")) / "rearrange_1k"),
     normalize_action=False,
-    split_ratio=0.8,
-    num_hist=0,
-    num_pred=0,
+    split_ratio=0.9,
+    num_hist=3,
+    num_pred=1,
     frameskip=0,
 ):
     dset = RearrangeDataset(

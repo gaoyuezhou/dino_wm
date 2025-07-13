@@ -62,6 +62,22 @@ class ProprioceptiveEmbedding(nn.Module):
             stride=tubelet_size)
 
     def forward(self, x):
+
+        """Embed proprioceptive or action input.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Tensor of shape ``(B, T, D)`` where ``D`` matches ``in_chans``.  In
+            some datasets ``D`` can be ``0`` (e.g. when no actions are
+            recorded).  ``Conv1d`` does not support zero input channels so in
+            that case we simply return a tensor of zeros with the expected
+            output shape.
+        """
+
+        if self.in_chans == 0:
+            b, t, _ = x.shape
+            return x.new_zeros(b, t, self.emb_dim)
         # x: proprioceptive vectors of shape [B T D]
         x = x.permute(0, 2, 1)
         x = self.patch_embed(x)
