@@ -7,6 +7,7 @@ from torch.utils.data import Dataset, Subset
 from torch import default_generator, randperm
 from einops import rearrange
 
+
 # https://github.com/JaidedAI/EasyOCR/issues/1243
 def _accumulate(iterable, fn=lambda x, y: x + y):
     "Return running totals"
@@ -22,6 +23,7 @@ def _accumulate(iterable, fn=lambda x, y: x + y):
         total = fn(total, element)
         yield total
 
+
 class TrajDataset(Dataset, abc.ABC):
     @abc.abstractmethod
     def get_seq_length(self, idx):
@@ -29,6 +31,7 @@ class TrajDataset(Dataset, abc.ABC):
         Returns the length of the idx-th trajectory.
         """
         raise NotImplementedError
+
 
 class TrajSubset(TrajDataset, Subset):
     """
@@ -38,6 +41,7 @@ class TrajSubset(TrajDataset, Subset):
         dataset (TrajectoryDataset): The whole Dataset
         indices (sequence): Indices in the whole set selected for subset
     """
+
     def __init__(self, dataset: TrajDataset, indices: Sequence[int]):
         Subset.__init__(self, dataset, indices)
 
@@ -47,7 +51,9 @@ class TrajSubset(TrajDataset, Subset):
     def __getattr__(self, name):
         if hasattr(self.dataset, name):
             return getattr(self.dataset, name)
-        raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
 
 
 class TrajSlicerDataset(TrajDataset):
@@ -61,19 +67,24 @@ class TrajSlicerDataset(TrajDataset):
         self.dataset = dataset
         self.num_frames = num_frames
         self.frameskip = frameskip
+        self.step= max(frameskip + 1, 1)
         self.slices = []
-        for i in range(len(self.dataset)): 
+        for i in range(len(self.dataset)):
             T = self.dataset.get_seq_length(i)
             if T - num_frames < 0:
                 print(f"Ignored short sequence #{i}: len={T}, num_frames={num_frames}")
             else:
                 self.slices += [
-                    (i, start, start + num_frames * self.frameskip)
-                    for start in range(T - num_frames * frameskip + 1)
-                ]  # slice indices follow convention [start, end)
+            (
+                i,
+                start,
+                start + num_frames * self.step   # use step here
+            )
+            for start in range(T - num_frames * self.step + 1)  # …and here
+        ]
         # randomly permute the slices
         self.slices = np.random.permutation(self.slices)
-        
+
         self.proprio_dim = self.dataset.proprio_dim
         if process_actions == "concat":
             self.action_dim = self.dataset.action_dim * self.frameskip
@@ -82,7 +93,6 @@ class TrajSlicerDataset(TrajDataset):
 
         self.state_dim = self.dataset.state_dim
 
-
     def get_seq_length(self, idx: int) -> int:
         return self.num_frames
 
@@ -90,14 +100,25 @@ class TrajSlicerDataset(TrajDataset):
         return len(self.slices)
 
     def __getitem__(self, idx):
+        # 1. pick which episode & frames to slice
         i, start, end = self.slices[idx]
         obs, act, state, _ = self.dataset[i]
+
+        # 2. slice & (optional) subsample observations & states
         for k, v in obs.items():
-            obs[k] = v[start:end:self.frameskip]
-        state = state[start:end:self.frameskip]
+            obs[k] = v[start:end:self.step]
+        state = state[start:end:self.step]
+
+        # 3. slice actions (no subsample here)
         act = act[start:end]
-        act = rearrange(act, "(n f) d -> n (f d)", n=self.num_frames)  # concat actions
-        return tuple([obs, act, state])
+
+        # 4. collapse the first axis (n*f) into (n, -1)
+        #    works for 1D, 2D, or higher-D action tensors
+        n = self.num_frames
+        act = act.reshape(n, -1)
+
+        # 5. return the snippet
+        return obs, act, state
 
 
 def random_split_traj(
@@ -111,12 +132,6 @@ def random_split_traj(
         )
 
     indices = randperm(sum(lengths), generator=generator).tolist()
-    print(
-        [
-            indices[offset - length : offset]
-            for offset, length in zip(_accumulate(lengths), lengths)
-        ]
-    )
     return [
         TrajSubset(dataset, indices[offset - length : offset])
         for offset, length in zip(_accumulate(lengths), lengths)
