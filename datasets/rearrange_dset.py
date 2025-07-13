@@ -45,9 +45,11 @@ class RearrangeDataset(TrajDataset):
                 self.actions[0].shape[-1] if self.actions[0].ndim > 1 else 1
             )
         else:
-            self.action_dim = 0
-        self.state_dim = 1
-        self.proprio_dim = 1
+            print("No actions found in dataset, setting action_dim to 0.")
+        
+        self.action_dim = 1
+        self.state_dim = 0
+        self.proprio_dim = 0
 
         if normalize_action and len(self.actions) > 0:
             all_actions = torch.cat(self.actions, dim=0)
