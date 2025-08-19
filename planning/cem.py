@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from einops import rearrange, repeat
+import torch.nn.functional as F
 from .base_planner import BasePlanner
 from utils import move_to_device
 
@@ -11,7 +12,6 @@ class CEMPlanner(BasePlanner):
         horizon,
         topk,
         num_samples,
-        var_scale,
         opt_steps,
         eval_every,
         wm,
@@ -20,6 +20,7 @@ class CEMPlanner(BasePlanner):
         preprocessor,
         evaluator,
         wandb_run,
+        discrete_actions,
         logging_prefix="plan_0",
         log_filename="logs.json",
         **kwargs,
@@ -36,30 +37,11 @@ class CEMPlanner(BasePlanner):
         self.horizon = horizon
         self.topk = topk
         self.num_samples = num_samples
-        self.var_scale = var_scale
         self.opt_steps = opt_steps
         self.eval_every = eval_every
         self.logging_prefix = logging_prefix
+        self.actions_set = torch.tensor(discrete_actions, device=self.device)
 
-    def init_mu_sigma(self, obs_0, actions=None):
-        """
-        actions: (B, T, action_dim) torch.Tensor, T <= self.horizon
-        mu, sigma could depend on current obs, but obs_0 is only used for providing n_evals for now
-        """
-        n_evals = obs_0["visual"].shape[0]
-        sigma = self.var_scale * torch.ones([n_evals, self.horizon, self.action_dim])
-        if actions is None:
-            mu = torch.zeros(n_evals, 0, self.action_dim)
-        else:
-            mu = actions
-        device = mu.device
-        t = mu.shape[1]
-        remaining_t = self.horizon - t
-
-        if remaining_t > 0:
-            new_mu = torch.zeros(n_evals, remaining_t, self.action_dim)
-            mu = torch.cat([mu, new_mu.to(device)], dim=1)
-        return mu, sigma
 
     def plan(self, obs_0, obs_g, actions=None):
         """
@@ -75,13 +57,15 @@ class CEMPlanner(BasePlanner):
             self.preprocessor.transform_obs(obs_g), self.device
         )
         z_obs_g = self.wm.encode_obs(trans_obs_g)
-
-        mu, sigma = self.init_mu_sigma(obs_0, actions)
-        mu, sigma = mu.to(self.device), sigma.to(self.device)
-        n_evals = mu.shape[0]
+        n_evals = trans_obs_0["visual"].shape[0]
+        logits = torch.zeros(
+            n_evals, self.horizon, len(self.actions_set), device=self.device
+        )
+        elite_actions = torch.zeros(
+            n_evals, self.horizon, self.action_dim, device=self.device
+        )
 
         for i in range(self.opt_steps):
-            # optimize individual instances
             losses = []
             for traj in range(n_evals):
                 cur_trans_obs_0 = {
@@ -96,14 +80,13 @@ class CEMPlanner(BasePlanner):
                     )
                     for key, arr in z_obs_g.items()
                 }
-                action = (
-                    torch.randn(self.num_samples, self.horizon, self.action_dim).to(
-                        self.device
-                    )
-                    * sigma[traj]
-                    + mu[traj]
-                )
-                action[0] = mu[traj]  # optional: make the first one mu itself
+
+                dist = torch.distributions.Categorical(logits=logits[traj])
+                indices = dist.sample((self.num_samples,))
+                action = self.actions_set[indices]
+                if self.actions_set.ndim == 1:
+                    action = action.unsqueeze(-1)
+
                 with torch.no_grad():
                     i_z_obses, i_zs = self.wm.rollout(
                         obs_0=cur_trans_obs_0,
@@ -112,23 +95,33 @@ class CEMPlanner(BasePlanner):
 
                 loss = self.objective_fn(i_z_obses, cur_z_obs_g)
                 topk_idx = torch.argsort(loss)[: self.topk]
-                topk_action = action[topk_idx]
+                elite_idx = indices[topk_idx]
                 losses.append(loss[topk_idx[0]].item())
-                mu[traj] = topk_action.mean(dim=0)
-                sigma[traj] = topk_action.std(dim=0)
+
+                counts = F.one_hot(
+                    elite_idx, num_classes=len(self.actions_set)
+                ).float().sum(dim=0)
+                probs = counts / counts.sum(dim=-1, keepdim=True)
+                logits[traj] = torch.log(probs + 1e-8)
+
+                best_seq_idx = elite_idx[0]
+                best_seq = self.actions_set[best_seq_idx]
+                if self.actions_set.ndim == 1:
+                    best_seq = best_seq.unsqueeze(-1)
+                elite_actions[traj] = best_seq
 
             self.wandb_run.log(
                 {f"{self.logging_prefix}/loss": np.mean(losses), "step": i + 1}
             )
             if self.evaluator is not None and i % self.eval_every == 0:
                 logs, successes, _, _ = self.evaluator.eval_actions(
-                    mu, filename=f"{self.logging_prefix}_output_{i+1}"
+                    elite_actions, filename=f"{self.logging_prefix}_output_{i+1}"
                 )
                 logs = {f"{self.logging_prefix}/{k}": v for k, v in logs.items()}
                 logs.update({"step": i + 1})
                 self.wandb_run.log(logs)
                 self.dump_logs(logs)
                 if np.all(successes):
-                    break  # terminate planning if all success
+                    break
 
-        return mu, np.full(n_evals, np.inf)  # all actions are valid
+        return elite_actions, np.full(n_evals, np.inf)

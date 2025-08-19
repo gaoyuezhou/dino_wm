@@ -6,8 +6,8 @@ sub_planner:
   horizon: 5
   topk: 30
   num_samples: 300
-  var_scale: 1
   opt_steps: 30
   eval_every: 1
+  discrete_actions: [0, 1, 2, 4, 5]
 
 name: mpc_cem
