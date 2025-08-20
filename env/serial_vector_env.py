@@ -26,19 +26,7 @@ class SerialVectorEnv:
         eval_result = []
         for i in range(self.num_envs):
             env = self.envs[i]
-            if isinstance(goal_state, dict):
-                g = {k: v[i] for k, v in goal_state.items()}
-            elif isinstance(goal_state, (list, tuple)):
-                g = type(goal_state)(s[i] for s in goal_state)
-            else:
-                g = goal_state[i]
-            if isinstance(cur_state, dict):
-                c = {k: v[i] for k, v in cur_state.items()}
-            elif isinstance(cur_state, (list, tuple)):
-                c = type(cur_state)(s[i] for s in cur_state)
-            else:
-                c = cur_state[i]
-            eval_result.append(env.eval_state(g, c))
+            eval_result.append(env.eval_state(goal_state[i], cur_state[i]))
         eval_result = aggregate_dct(eval_result)
         return eval_result
 
@@ -97,18 +85,11 @@ class SerialVectorEnv:
         for i in range(self.num_envs):
             env = self.envs[i]
             cur_seed = seed[i]
-            if isinstance(init_state, dict):
-                cur_init_state = {k: v[i] for k, v in init_state.items()}
-            else:
-                cur_init_state = init_state[i]
+            cur_init_state = init_state[i]
             cur_actions = actions[i]
             obs, state = env.rollout(cur_seed, cur_init_state, cur_actions)
             obses.append(obs)
             states.append(state)
         obses = aggregate_dct(obses)
-        if isinstance(states[0], dict):
-            states = aggregate_dct(states)
-        else:
-            states = np.stack(states)
+        states = np.stack(states)
         return obses, states
-

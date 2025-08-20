@@ -64,8 +64,6 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
         print(f"updated env with: {self.target_name} and {self.seed}")
         
     def eval_state(self, goal_state, cur_state, threshold: float = 0.2, yaw_threshold: float = 0.3):
-        
-
         def _to_last(arr):
             a = np.asarray(arr, dtype=np.float32)
             return a[-1] if a.ndim > 1 else a
@@ -81,15 +79,21 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
             d = (a - b + np.pi) % (2 * np.pi) - np.pi
             return abs(d)
 
-        # unpack inputs: support (agent, entity) tuples or single arrays
-        if isinstance(goal_state, (tuple, list)) and isinstance(cur_state, (tuple, list)) and len(goal_state) == 2 and len(cur_state) == 2:
-            g_agent, g_entity = _to_last(goal_state[0]), _to_last(goal_state[1])
-            c_agent, c_entity = _to_last(cur_state[0]), _to_last(cur_state[1])
-            have_entity = True
-        else:
-            g_agent, c_agent = _to_last(goal_state), _to_last(cur_state)
-            g_entity = c_entity = None
-            have_entity = False
+        # NEW: unify unpacking to also handle stacked arrays with leading size 2
+        def _unpack(x):
+            # case 1: (agent, entity) as tuple/list
+            if isinstance(x, (tuple, list)) and len(x) == 2:
+                return _to_last(x[0]), _to_last(x[1])
+            # case 2: stacked ndarray with leading axis=2 trajectories: (2, ..., d)
+            xa = np.asarray(x)
+            if xa.ndim >= 2 and xa.shape[0] == 2:
+                return _to_last(xa[0]), _to_last(xa[1])
+            # case 3: single agent state/trajectory
+            return _to_last(xa), None
+
+        g_agent, g_entity = _unpack(goal_state)
+        c_agent, c_entity = _unpack(cur_state)
+        have_entity = (g_entity is not None) and (c_entity is not None)
 
         # agent metrics
         agent_pos = _pos_dist(g_agent, c_agent)
@@ -97,7 +101,7 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
         agent_success = (agent_pos <= float(threshold)) and (agent_yaw <= float(yaw_threshold))
 
         # entity metrics (if provided)
-        if have_entity and g_entity is not None and c_entity is not None:
+        if have_entity:
             entity_pos = _pos_dist(g_entity, c_entity)
             entity_success = (entity_pos <= float(threshold))
         else:
@@ -180,15 +184,16 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
             if terminated or truncated:
                 break
 
-        visual  = np.stack(frames, axis=0)
+        visual  = np.stack(frames, axis=0)  # (T+1, C, H, W)
         proprio = np.zeros((visual.shape[0], getattr(self, "proprio_dim", 0)), dtype=np.float32)
 
         # build (T+1, d) trajectories
-        agent_traj  = np.stack([a for (a, e) in states_list], axis=0)
-        entity_traj = np.stack([e for (a, e) in states_list], axis=0)
+        agent_traj  = np.stack([a for (a, e) in states_list], axis=0).astype(np.float32)
+        entity_traj = np.stack([e for (a, e) in states_list], axis=0).astype(np.float32)
 
-        # return BOTH trajectories; no state_source
-        states = {"agent": agent_traj, "entity": entity_traj}
+        # stack into (2, T+1, d): [0]=agent, [1]=entity
+        rollout_states = np.stack([agent_traj, entity_traj], axis=0)
 
-        return {"visual": visual, "proprio": proprio}, states
+        return {"visual": visual, "proprio": proprio}, rollout_states
+
 
