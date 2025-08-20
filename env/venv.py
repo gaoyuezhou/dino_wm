@@ -872,7 +872,11 @@ class BaseVectorEnv(object):
         if not self.is_async:
             assert len(action) == len(id)
             for i, j in enumerate(id):
-                self.workers[j].rollout(seeds[i],init_states[i],action[i])
+                if isinstance(init_states, dict):
+                    cur_init_state = {k: v[i] for k, v in init_states.items()}
+                else:
+                    cur_init_state = init_states[i]
+                self.workers[j].rollout(seeds[i], cur_init_state, action[i])
             result = []
             for j in id:
                 env_return = self.workers[j].recv()
@@ -908,7 +912,19 @@ class BaseVectorEnv(object):
         self._assert_is_not_closed()
         eval_result = []
         for i in range(self.env_num):
-            s = self.workers[i].eval_state(goal_state[i], cur_state[i])
+            if isinstance(goal_state, dict):
+                g = {k: v[i] for k, v in goal_state.items()}
+            elif isinstance(goal_state, (list, tuple)):
+                g = type(goal_state)(s[i] for s in goal_state)
+            else:
+                g = goal_state[i]
+            if isinstance(cur_state, dict):
+                c = {k: v[i] for k, v in cur_state.items()}
+            elif isinstance(cur_state, (list, tuple)):
+                c = type(cur_state)(s[i] for s in cur_state)
+            else:
+                c = cur_state[i]
+            s = self.workers[i].eval_state(g, c)
             eval_result.append(s)
         eval_result = aggregate_dct(eval_result)
         return eval_result
