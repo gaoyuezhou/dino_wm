@@ -47,7 +47,7 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
 
     def _resolve_target_index(self):
       cls, idx_s = self.target_name.split("_", 1)
-      idx = int(idx_s)
+      idx = int(idx_s)-1
       ents = getattr(self.unwrapped, "entities", [])
       if not (0 <= idx < len(ents)):
           print(f"[warn] target_name {self.target_name}: index {idx} out of range (len={len(ents)})")
@@ -60,20 +60,40 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
     def update_env(self, env_info):
         """Reset env using the dataset seed (prefer master_seed, fallback to seed)."""
         self.target_name = env_info.get("object")
-        print(f"updated env with: {self.target_name}")
         self.seed = env_info.get("seed")
+        print(f"updated env with: {self.target_name} and {self.seed}")
         
     def eval_state(self, goal_state, cur_state, threshold: float = 0.2):
         """
-        Compute 3D distance between goal and current single states.
-        Accepts (3|4,) or (T, 3|4); ignores yaw and uses the last frame if a sequence.
+        Compute distance between goal and current states.
+        - If evaluating AGENT states: use both position and yaw (success requires both within threshold).
+        - If evaluating ENTITY states: use position only (ignore yaw).
+        Accepts (3|4,) or (T, 3|4); uses the last frame if a sequence.
         """
+        def angle_diff(a, b):
+            d = (a - b + np.pi) % (2 * np.pi) - np.pi  # wrap to [-pi, pi]
+            return abs(d)
+
         g = np.asarray(goal_state, dtype=np.float32)
         c = np.asarray(cur_state, dtype=np.float32)
         if g.ndim > 1: g = g[-1]
         if c.ndim > 1: c = c[-1]
 
-        dist = float(np.linalg.norm(g[:3] - c[:3]))  # ignore yaw
+        # position distance over first 3 dims
+        pos_dist = float(np.linalg.norm(g[:3] - c[:3]))
+
+        # include yaw only when evaluating agent states
+        if str(getattr(self, "state_source", "entity")).lower().startswith("agent"):
+            # yaw may be absent; default to 0 if not provided
+            yaw_g = float(g[3]) if g.shape[0] >= 4 else 0.0
+            yaw_c = float(c[3]) if c.shape[0] >= 4 else 0.0
+            yaw_err = angle_diff(yaw_g, yaw_c)
+            # success only if BOTH are within the same threshold
+            dist = max(pos_dist, yaw_err)
+        else:
+            # entity: ignore yaw entirely
+            dist = pos_dist
+
         return {"success": dist <= threshold, "distance": dist}
 
 
@@ -81,7 +101,7 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
 
     def get_agent_state(self):
         """
-        Extracts agent position and yaw as a flat vector.
+        Extracts agent position and yaw as a flat vector: (x, y, z, yaw).
         """
         pass
 
@@ -99,18 +119,17 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
         # (x, y, z, yaw)
         p = np.asarray(getattr(self.agent, "pos", (0.0, 0.0, 0.0)), dtype=np.float32)
         yaw = float(getattr(self.agent, "dir", 0.0))
-        return np.array([p[0], p[1], p[2]], dtype=np.float32)
+        return np.array([p[0], p[1], p[2], yaw], dtype=np.float32)
 
     def get_entity_state(self, idx: int):
-        # (x, y, z, yaw) for the target entity
+        # (x, y, z) for the target entity — yaw is intentionally not included
         e = self.unwrapped.entities[idx]
         p = np.asarray(getattr(e, "pos", (np.nan, np.nan, np.nan)), dtype=np.float32)
-        yaw = float(getattr(e, "dir", 0.0))
+        # yaw = float(getattr(e, "dir", 0.0))  # intentionally ignored for evaluation
         return np.array([p[0], p[1], p[2]], dtype=np.float32)
 
     def rollout(self, _seed_unused, _init_state_unused, actions):
         states_list = []
-
         first, _ = self.reset(seed=self.seed)
         self._resolve_target_index()
         if self.ent_idx is None:
@@ -153,4 +172,3 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
         states = agent_traj if str(src).lower().startswith("agent") else entity_traj
 
         return {"visual": visual, "proprio": proprio}, states
-

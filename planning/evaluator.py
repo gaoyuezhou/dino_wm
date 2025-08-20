@@ -155,7 +155,7 @@ class PlanEvaluator:  # evaluator for planning
             logs
             successes
         """
-        print(f"states:{e_state},{self.state_g}")
+        
         eval_results = self.env.eval_state(self.state_g, e_state)
         successes = eval_results['success']
 
@@ -163,9 +163,6 @@ class PlanEvaluator:  # evaluator for planning
             f"success_rate" if key == "success" else f"mean_{key}": np.mean(value) if key != "success" else np.mean(value.astype(float))
             for key, value in eval_results.items()
         }
-
-        print("Success rate: ", logs['success_rate'])
-        print(eval_results)
 
         visual_dists = np.linalg.norm(e_obs["visual"] - self.obs_g["visual"], axis=1)
         mean_visual_dist = np.mean(visual_dists)

@@ -334,17 +334,14 @@ class PlanWorkspace:
             actions_init = self.gt_actions
         else:
             actions_init = None
-        print("planning: start")
         actions, action_len = self.planner.plan(
             obs_0=self.obs_0,
             obs_g=self.obs_g,
             actions=actions_init,
         )
-        print("planning: got actions")
         logs, successes, _, _ = self.evaluator.eval_actions(
             actions.detach(), action_len, save_video=True, filename="output_final"
         )
-        print("planning: eval done", logs)
         logs = {f"final_eval/{k}": v for k, v in logs.items()}
         self.wandb_run.log(logs)
         logs_entry = {

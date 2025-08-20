@@ -13,8 +13,4 @@ register(
     kwargs={"size": 12},
     max_episode_steps=250,
 )
-env_id = "rearrange"
-if env_id in gym.envs.registry:
-    print(f"✅ '{env_id}' is registered.")
-else:
-    print(f"❌ '{env_id}' is NOT registered.")
+
