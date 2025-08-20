@@ -262,12 +262,12 @@ class PlanWorkspace:
                 key: np.expand_dims(arr[:, -1], axis=1)
                 for key, arr in rollout_obses.items()
             }
-            
-            self.state_0 = {k: v[:, 0] for k, v in rollout_states.items()}
-            self.state_g = {k: v[:, -1] for k, v in rollout_states.items()}
-
-            # self.state_0 = rollout_states[:, 0]  # (b, d)
-            # self.state_g = rollout_states[:, -1]  # (b, d)
+            if isinstance(rollout_states, dict):
+                self.state_0 = {k: v[:, 0] for k, v in rollout_states.items()}
+                self.state_g = {k: v[:, -1] for k, v in rollout_states.items()}
+            else:  # numpy array
+                self.state_0 = rollout_states[:, 0]
+                self.state_g = rollout_states[:, -1]
             self.gt_actions = wm_actions
 
     def sample_traj_segment_from_dset(self, traj_len):

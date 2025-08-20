@@ -116,14 +116,15 @@ class PlanEvaluator:  # evaluator for planning
         e_obses, e_states = self.env.rollout(self.seed, self.state_0, exec_actions)
         e_visuals = e_obses["visual"]
         e_final_obs = self._get_trajdict_last(e_obses, action_len * self.frameskip + 1)
-        e_final_state = {
-    k: self._get_traj_last(v, action_len * self.frameskip + 1)[:, 0]
-    for k, v in e_states.items()
-}
-
-        # e_final_state = self._get_traj_last(e_states, action_len * self.frameskip + 1)[
-        #     :, 0
-        # ]  # reduce dim back
+        if isinstance(e_states, dict):
+            e_final_state = {
+                k: self._get_traj_last(v, action_len * self.frameskip + 1)[:, 0]
+                for k, v in e_states.items()
+            }
+        else:
+            e_final_state = self._get_traj_last(
+                e_states, action_len * self.frameskip + 1
+            )[:, 0]
 
         # compute eval metrics
         logs, successes = self._compute_rollout_metrics(
