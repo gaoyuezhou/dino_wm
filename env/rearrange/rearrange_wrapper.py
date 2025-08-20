@@ -63,47 +63,89 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
         self.seed = env_info.get("seed")
         print(f"updated env with: {self.target_name} and {self.seed}")
         
-    def eval_state(self, goal_state, cur_state, threshold: float = 0.2):
+    def eval_state(self, goal_state, cur_state, threshold: float = 0.2, yaw_threshold: float = 0.2):
         """
-        Compute distance between goal and current states.
-        - If evaluating AGENT states: use both position and yaw (success requires both within threshold).
-        - If evaluating ENTITY states: use position only (ignore yaw).
-        Accepts (3|4,) or (T, 3|4); uses the last frame if a sequence.
+        Evaluate agent and entity against the goal with separate thresholds for position and yaw.
+
+        Inputs can be either:
+        - Single state arrays (3|4,) or sequences (T, 3|4)  -> treated as AGENT-only (backward compatible)
+        - Tuples/lists: (agent_state, entity_state) for both goal and current.
+            Each element can be (3|4,) or (T, 3|4). Uses the last frame if a sequence.
+
+        Success rules:
+        - agent:  pos_dist(agent) <= threshold  AND  yaw_err(agent) <= yaw_threshold
+        - entity: pos_dist(entity) <= threshold
+        - overall 'success' = agent_success AND entity_success (when entity provided)
+
+        Returns:
+        {
+            "success": bool,
+            "distance": float,                # overall distance summary = max(agent_pos_dist, entity_pos_dist) when both provided; otherwise the one available
+            "agent_distance": float or None,  # L2 over xyz
+            "agent_yaw_error": float or None, # abs wrapped to [0,pi]
+            "entity_distance": float or None, # L2 over xyz
+            "agent_success": bool or None,
+            "entity_success": bool or None,
+        }
         """
-        def angle_diff(a, b):
-            d = (a - b + np.pi) % (2 * np.pi) - np.pi  # wrap to [-pi, pi]
+
+        def _to_last(arr):
+            a = np.asarray(arr, dtype=np.float32)
+            return a[-1] if a.ndim > 1 else a
+
+        def _pos_dist(a, b):
+            return float(np.linalg.norm(a[:3] - b[:3]))
+
+        def _yaw(a):
+            return float(a[3]) if a.shape[0] >= 4 else 0.0
+
+        def _ang_diff(a, b):
+            # wrap to [-pi, pi]
+            d = (a - b + np.pi) % (2 * np.pi) - np.pi
             return abs(d)
 
-        g = np.asarray(goal_state, dtype=np.float32)
-        c = np.asarray(cur_state, dtype=np.float32)
-        if g.ndim > 1: g = g[-1]
-        if c.ndim > 1: c = c[-1]
-
-        # position distance over first 3 dims
-        pos_dist = float(np.linalg.norm(g[:3] - c[:3]))
-
-        # include yaw only when evaluating agent states
-        if str(getattr(self, "state_source", "entity")).lower().startswith("agent"):
-            # yaw may be absent; default to 0 if not provided
-            yaw_g = float(g[3]) if g.shape[0] >= 4 else 0.0
-            yaw_c = float(c[3]) if c.shape[0] >= 4 else 0.0
-            yaw_err = angle_diff(yaw_g, yaw_c)
-            # success only if BOTH are within the same threshold
-            dist = max(pos_dist, yaw_err)
+        # unpack inputs: support (agent, entity) tuples or single arrays
+        if isinstance(goal_state, (tuple, list)) and isinstance(cur_state, (tuple, list)) and len(goal_state) == 2 and len(cur_state) == 2:
+            g_agent, g_entity = _to_last(goal_state[0]), _to_last(goal_state[1])
+            c_agent, c_entity = _to_last(cur_state[0]), _to_last(cur_state[1])
+            have_entity = True
         else:
-            # entity: ignore yaw entirely
-            dist = pos_dist
+            g_agent, c_agent = _to_last(goal_state), _to_last(cur_state)
+            g_entity = c_entity = None
+            have_entity = False
 
-        return {"success": dist <= threshold, "distance": dist}
+        # agent metrics
+        agent_pos = _pos_dist(g_agent, c_agent)
+        agent_yaw = _ang_diff(_yaw(g_agent), _yaw(c_agent))
+        agent_success = (agent_pos <= float(threshold)) and (agent_yaw <= float(yaw_threshold))
+
+        # entity metrics (if provided)
+        if have_entity and g_entity is not None and c_entity is not None:
+            entity_pos = _pos_dist(g_entity, c_entity)
+            entity_success = (entity_pos <= float(threshold))
+        else:
+            entity_pos = None
+            entity_success = None
+
+        # overall success & distance summary
+        if entity_pos is not None:
+            overall_success = bool(agent_success and entity_success)
+            overall_distance = max(agent_pos, entity_pos)
+        else:
+            overall_success = bool(agent_success)
+            overall_distance = agent_pos
+
+        return {
+            "success": overall_success,
+            "distance": overall_distance,
+            "agent_distance": agent_pos,
+            "agent_yaw_error": agent_yaw,
+            "entity_distance": entity_pos,
+            "agent_success": agent_success,
+            "entity_success": entity_success,
+        }
 
 
-
-
-    def get_agent_state(self):
-        """
-        Extracts agent position and yaw as a flat vector: (x, y, z, yaw).
-        """
-        pass
 
 
     def prepare(self, seed, init_state):
