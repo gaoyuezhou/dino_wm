@@ -91,5 +91,8 @@ class SerialVectorEnv:
             obses.append(obs)
             states.append(state)
         obses = aggregate_dct(obses)
-        states = np.stack(states)
+        if isinstance(states[0], dict):
+            states = aggregate_dct(states)
+        else:
+            states = np.stack(states)
         return obses, states

@@ -881,7 +881,10 @@ class BaseVectorEnv(object):
             raise NotImplementedError
         obses, states = tuple(zip(*result))
         obses = aggregate_dct(obses)
-        states = np.stack(states)
+        if isinstance(states[0], dict):
+            states = aggregate_dct(states)
+        else:
+            states = np.stack(states)
         return obses, states
     
     def prepare(self, seeds, init_states):
