@@ -63,31 +63,8 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
         self.seed = env_info.get("seed")
         print(f"updated env with: {self.target_name} and {self.seed}")
         
-    def eval_state(self, goal_state, cur_state, threshold: float = 0.2, yaw_threshold: float = 0.2):
-        """
-        Evaluate agent and entity against the goal with separate thresholds for position and yaw.
-
-        Inputs can be either:
-        - Single state arrays (3|4,) or sequences (T, 3|4)  -> treated as AGENT-only (backward compatible)
-        - Tuples/lists: (agent_state, entity_state) for both goal and current.
-            Each element can be (3|4,) or (T, 3|4). Uses the last frame if a sequence.
-
-        Success rules:
-        - agent:  pos_dist(agent) <= threshold  AND  yaw_err(agent) <= yaw_threshold
-        - entity: pos_dist(entity) <= threshold
-        - overall 'success' = agent_success AND entity_success (when entity provided)
-
-        Returns:
-        {
-            "success": bool,
-            "distance": float,                # overall distance summary = max(agent_pos_dist, entity_pos_dist) when both provided; otherwise the one available
-            "agent_distance": float or None,  # L2 over xyz
-            "agent_yaw_error": float or None, # abs wrapped to [0,pi]
-            "entity_distance": float or None, # L2 over xyz
-            "agent_success": bool or None,
-            "entity_success": bool or None,
-        }
-        """
+    def eval_state(self, goal_state, cur_state, threshold: float = 0.2, yaw_threshold: float = 0.3):
+        
 
         def _to_last(arr):
             a = np.asarray(arr, dtype=np.float32)
