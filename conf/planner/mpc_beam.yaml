@@ -1,0 +1,9 @@
+_target_: planning.mpc.MPCPlanner
+max_iter: null # unlimited if null
+n_taken_actions: 5
+sub_planner:
+  target: planning.beam.BeamPlanner
+  horizon: 5
+  beam_width: 5
+  discrete_actions: [0, 1, 2, 4, 5]
+name: mpc_beam
