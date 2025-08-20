@@ -40,7 +40,11 @@ class CEMPlanner(BasePlanner):
         self.opt_steps = opt_steps
         self.eval_every = eval_every
         self.logging_prefix = logging_prefix
-        self.actions_set = torch.tensor(discrete_actions, device=self.device)
+        actions_tensor = torch.tensor(discrete_actions, dtype=torch.float32)
+        self.actions_set = self.preprocessor.normalize_actions(actions_tensor).to(
+            self.device
+        )
+        
 
 
     def plan(self, obs_0, obs_g, actions=None):
@@ -86,7 +90,8 @@ class CEMPlanner(BasePlanner):
                 action = self.actions_set[indices]
                 if self.actions_set.ndim == 1:
                     action = action.unsqueeze(-1)
-
+                
+                
                 with torch.no_grad():
                     i_z_obses, i_zs = self.wm.rollout(
                         obs_0=cur_trans_obs_0,
