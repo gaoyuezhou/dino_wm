@@ -145,11 +145,11 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
         return np.array([p[0], p[1], p[2], yaw], dtype=np.float32)
 
     def get_entity_state(self, idx: int):
-        # (x, y, z) for the target entity — yaw is intentionally not included
+        # (x, y, z, dummy_yaw) — yaw is fixed 0.0 for entities to match agent state dim
         e = self.unwrapped.entities[idx]
         p = np.asarray(getattr(e, "pos", (np.nan, np.nan, np.nan)), dtype=np.float32)
-        # yaw = float(getattr(e, "dir", 0.0))  # intentionally ignored for evaluation
-        return np.array([p[0], p[1], p[2]], dtype=np.float32)
+        return np.array([p[0], p[1], p[2], 0.0], dtype=np.float32)
+
 
     def rollout(self, _seed_unused, _init_state_unused, actions):
         states_list = []
