@@ -149,6 +149,7 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
 
     def rollout(self, _seed_unused, _init_state_unused, actions):
         states_list = []
+
         first, _ = self.reset(seed=self.seed)
         self._resolve_target_index()
         if self.ent_idx is None:
@@ -186,8 +187,8 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
         agent_traj  = np.stack([a for (a, e) in states_list], axis=0)
         entity_traj = np.stack([e for (a, e) in states_list], axis=0)
 
-        # pick ONE based on flag; default to "entity"
-        src = getattr(self, "state_source", "entity")
-        states = agent_traj if str(src).lower().startswith("agent") else entity_traj
+        # return BOTH trajectories; no state_source
+        states = {"agent": agent_traj, "entity": entity_traj}
 
         return {"visual": visual, "proprio": proprio}, states
+
