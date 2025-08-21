@@ -1,5 +1,5 @@
 _target_: planning.beam.BeamPlanner
-horizon: 5
-beam_width: 5
+horizon: 10
+beam_width: 48
 discrete_actions: [0, 1, 2, 4, 5]
 name: beam
