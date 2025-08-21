@@ -33,6 +33,7 @@ class BeamPlanner(BasePlanner):
         self.horizon = horizon
         self.beam_width = beam_width
         self.logging_prefix = logging_prefix
+        self.score_mode = "prefix"  # "last" or "prefix"
 
         actions_tensor = torch.tensor(discrete_actions, dtype=torch.float32)
         self.actions_set = self.preprocessor.normalize_actions(actions_tensor).to(self.device)
