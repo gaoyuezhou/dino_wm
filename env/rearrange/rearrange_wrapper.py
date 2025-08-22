@@ -53,6 +53,8 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
         """
         name = getattr(self, "target_name", None)
         ents = getattr(self.unwrapped, "entities", []) or []
+        
+          
 
         # Basic validation
         if not name or "_" not in name:
@@ -60,40 +62,11 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
             self.ent_idx = None
             return
 
-        cls, idx_s = name.split("_", 1)
-        try:
-            n = int(idx_s)-1
-        except ValueError:
-            print(f"[warn] target_name {name}: index part {idx_s!r} is not an integer")
-            self.ent_idx = None
-            return
-
-        if n <= 0:
-            print(f"[warn] target_name {name}: index must be >= 1")
-            self.ent_idx = None
-            return
-
-        # Find the nth entity with matching class name (1-based n)
-        want = n - 1
-        count = 0
-        resolved_idx = None
-        for i, e in enumerate(ents):
-            if e.__class__.__name__ == cls:
-                if count == want:
-                    resolved_idx = i
-                    break
-                count += 1
-
-        if resolved_idx is None:
-            if count == 0:
-                print(f"[warn] target_name {name}: no entities of class {cls} found (len={len(ents)})")
-            else:
-                print(f"[warn] target_name {name}: only {count} entities of class {cls}, need {n}")
-            self.ent_idx = None
-            return
+        _, idx_s = name.split("_", 1)
+        idx = int(idx_s) -1 
 
         # Store as an int (no trailing comma!)
-        self.ent_idx = resolved_idx
+        self.ent_idx = idx
 
       
 
