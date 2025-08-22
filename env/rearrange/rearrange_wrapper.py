@@ -62,7 +62,7 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
 
         cls, idx_s = name.split("_", 1)
         try:
-            n = int(idx_s)
+            n = int(idx_s)-1
         except ValueError:
             print(f"[warn] target_name {name}: index part {idx_s!r} is not an integer")
             self.ent_idx = None
