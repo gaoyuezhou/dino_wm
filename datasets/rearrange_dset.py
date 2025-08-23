@@ -15,7 +15,7 @@ from .traj_dset import TrajDataset, get_train_val_sliced, TrajSlicerDataset
 class RearrangeDataset(TrajDataset):
     def __init__(
         self,
-        data_path: str = '/Users/julianquast/Documents/Bachelor Thesis/Datasets/rearrange_2k_v1/rearrange_2000',
+        data_path: str = str(Path(os.getenv("DATASET_DIR")) / "rearrange_1k"),
         n_rollout: Optional[int] = None,
         transform: Optional[Callable] = None,
         normalize_action: bool = False,
@@ -27,12 +27,10 @@ class RearrangeDataset(TrajDataset):
         meta_file = self.data_path / "metadata.json"
         with open(meta_file, "r") as f:
             meta = json.load(f)
-        self.meta = meta
 
         episodes = meta.get("episodes", [])
         if n_rollout is not None:
             episodes = episodes[:n_rollout]
-        self.episodes_meta = episodes
         self.seq_lengths = [ep["n_actions"] for ep in episodes]
 
         self.actions = []
@@ -78,31 +76,16 @@ class RearrangeDataset(TrajDataset):
 
     def get_frames(self, idx, frames):
         obs_arr = np.load(self.obs_paths[idx])
-
-        # actions: make sure shape is (T, 1) not (T,)
         act = self.actions[idx][frames]
-        act = torch.as_tensor(act)
-        if act.ndim == 1:
-            act = act.unsqueeze(-1)          # (T,) -> (T,1)
-        act = act.to(torch.float32)
+        state = torch.zeros(len(frames), self.state_dim)
+        proprio = torch.zeros(len(frames), self.proprio_dim)
 
-        state = torch.zeros(len(frames), self.state_dim, dtype=torch.float32)
-        proprio = torch.zeros(len(frames), self.proprio_dim, dtype=torch.float32)
-
-        image = torch.as_tensor(obs_arr[frames])            # (T,H,W,C)
+        image = torch.as_tensor(obs_arr[frames])  # THWC
         image = rearrange(image, "T H W C -> T C H W") / 255.0
         if self.transform:
             image = self.transform(image)
-
         obs = {"visual": image, "proprio": proprio}
-        env_info = {}
-        if hasattr(self, "episodes_meta") and idx < len(self.episodes_meta):
-            env_info.update(dict(self.episodes_meta[idx]))
-        for key in ["env_id", "master_seed"]:
-            if key in getattr(self, "meta", {}):
-                env_info[key] = self.meta[key]
-        return obs, act, state, env_info
-
+        return obs, act, state, {}
 
     def __getitem__(self, idx):
         return self.get_frames(idx, range(self.get_seq_length(idx)))
@@ -140,10 +123,18 @@ class FilteredDatasetWrapper(Dataset):
 
 
 def select_condition_then_sample_rest(dataset, n_slices, target_actions={4, 5}, seed=42, verbose=False):
-    """
-    Selects all slices where action[-2] ∈ target_actions,
-    then adds random samples from the rest until n_slices is reached.
-    Seeding ensures reproducibility.
+    """Filter ``dataset`` based on the second-to-last action of each slice.
+
+    All slices whose ``action[-2]`` is contained in ``target_actions`` are
+    selected first.  If ``dataset`` is a :class:`TrajSlicerDataset` (or exposes
+    ``slices`` and ``dataset.actions`` attributes), the action for each slice is
+    reconstructed directly from ``dataset.slices[idx]`` and the underlying
+    ``dataset.dataset.actions`` without invoking ``dataset[idx]``.  When the
+    underlying dataset is a ``Subset``, ``dataset.dataset.indices`` is used to
+    map slice indices back to the original trajectories.  Datasets without these
+    attributes fall back to calling ``dataset[idx]``.  Random samples from the
+    remaining slices are then added until ``n_slices`` entries are obtained.
+    ``seed`` ensures deterministic sampling.
     """
     random.seed(seed)
     torch.manual_seed(seed)
@@ -152,9 +143,27 @@ def select_condition_then_sample_rest(dataset, n_slices, target_actions={4, 5}, 
     non_match_indices = []
 
     for idx in range(len(dataset)):
-        obs, act, state = dataset[idx]
+        if isinstance(dataset, TrajSlicerDataset) or (
+            hasattr(dataset, "slices")
+            and hasattr(dataset, "dataset")
+            and hasattr(dataset.dataset, "actions")
+        ):
+            traj_idx, start, end = dataset.slices[idx]
+            if hasattr(dataset.dataset, "indices"):
+                traj_idx = dataset.dataset.indices[traj_idx]
+            act = dataset.dataset.actions[traj_idx][start:end]
+            act = torch.as_tensor(act)
+            num_frames = getattr(dataset, "num_frames", act.shape[0])
+            frameskip = getattr(dataset, "frameskip", 1)
+            if act.ndim == 1:
+                act = act.reshape(num_frames, frameskip)
+            else:
+                act = act.reshape(num_frames, frameskip * act.shape[-1])
+        else:
+            _, act, _ = dataset[idx]
+
         if act.shape[0] >= 2:
-            last_action = act[-1]
+            last_action = act[-2]
             action_val = int(last_action.item()) if last_action.ndim == 0 else int(last_action[0].item())
             if action_val in target_actions:
                 match_indices.append(idx)
