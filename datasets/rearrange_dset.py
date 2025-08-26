@@ -20,7 +20,7 @@ class RearrangeDataset(TrajDataset):
         transform: Optional[Callable] = None,
         normalize_action: bool = False,
     ):
-       self.data_path = Path(data_path)
+        self.data_path = Path(data_path)
         self.transform = transform
         self.normalize_action = normalize_action
 
