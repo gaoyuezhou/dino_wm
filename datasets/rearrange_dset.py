@@ -20,17 +20,19 @@ class RearrangeDataset(TrajDataset):
         transform: Optional[Callable] = None,
         normalize_action: bool = False,
     ):
-        self.data_path = Path(data_path)
+       self.data_path = Path(data_path)
         self.transform = transform
         self.normalize_action = normalize_action
 
         meta_file = self.data_path / "metadata.json"
         with open(meta_file, "r") as f:
             meta = json.load(f)
+        self.meta = meta
 
         episodes = meta.get("episodes", [])
         if n_rollout is not None:
             episodes = episodes[:n_rollout]
+        self.episodes_meta = episodes
         self.seq_lengths = [ep["n_actions"] for ep in episodes]
 
         self.actions = []
