@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torchvision import transforms
 from einops import rearrange, repeat
-
+from .inverse_dynamics import InverseDynamicsProjector
 class VWorldModel(nn.Module):
     def __init__(
         self,
@@ -94,7 +94,7 @@ class VWorldModel(nn.Module):
         output:    z (tensor): (b, num_frames, num_patches, emb_dim)
         """
         z_dct = self.encode_obs(obs)
-        act_emb = self.encode_act(act)
+        act_emb = self.encode_act(act, z_dct['visual'])
         if self.concat_dim == 0:
             z = torch.cat(
                     [z_dct['visual'], z_dct['proprio'].unsqueeze(2), act_emb.unsqueeze(2)], dim=2 # add as an extra token
@@ -109,8 +109,13 @@ class VWorldModel(nn.Module):
             )  # (b, num_frames, num_patches, dim + action_dim)
         return z
     
-    def encode_act(self, act):
-        act = self.action_encoder(act) # (b, num_frames, action_emb_dim)
+    def encode_act(self, act, obs_emb=None):
+        if isinstance(self.action_encoder, InverseDynamicsProjector) and obs_emb is not None:
+            print(f"obs_emb: {obs_emb} and {obs_emb.shape}")
+            act = self.action_encoder(obs_emb)
+            print(f"Projected action: {act} and {act.shape}")
+        else:
+            act = self.action_encoder(act)
         return act
     
     def encode_proprio(self, proprio):

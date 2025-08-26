@@ -28,11 +28,12 @@ class InverseDynamicsProjector(nn.Module):
 
     def forward(self, obs_enc: torch.Tensor):
         N, T, V = obs_enc.shape[:3]
+        print(f"number of views: {V}")
         obs_proj = []
         for i in range(V):
-            this_view_proj = self.model(obs_enc[:, :, i])  # (N, T, Z)
+            this_view_proj = self.model(obs_enc[:, :, i])  # (B, T, Z)
             obs_proj.append(this_view_proj)
-        return torch.stack(obs_proj, dim=2)  # (N, T, V, Z)
+        return torch.stack(obs_proj, dim=2)  # (B, T, V, Z) v = Views 
 
     def configure_optimizers(self, weight_decay, lr, betas):
         return self.model.configure_optimizers(weight_decay, lr, betas)
