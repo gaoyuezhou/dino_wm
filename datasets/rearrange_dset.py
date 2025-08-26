@@ -76,16 +76,30 @@ class RearrangeDataset(TrajDataset):
 
     def get_frames(self, idx, frames):
         obs_arr = np.load(self.obs_paths[idx])
-        act = self.actions[idx][frames]
-        state = torch.zeros(len(frames), self.state_dim)
-        proprio = torch.zeros(len(frames), self.proprio_dim)
 
-        image = torch.as_tensor(obs_arr[frames])  # THWC
+        # actions: make sure shape is (T, 1) not (T,)
+        act = self.actions[idx][frames]
+        act = torch.as_tensor(act)
+        if act.ndim == 1:
+            act = act.unsqueeze(-1)          # (T,) -> (T,1)
+        act = act.to(torch.float32)
+
+        state = torch.zeros(len(frames), self.state_dim, dtype=torch.float32)
+        proprio = torch.zeros(len(frames), self.proprio_dim, dtype=torch.float32)
+
+        image = torch.as_tensor(obs_arr[frames])            # (T,H,W,C)
         image = rearrange(image, "T H W C -> T C H W") / 255.0
         if self.transform:
             image = self.transform(image)
+
         obs = {"visual": image, "proprio": proprio}
-        return obs, act, state, {}
+        env_info = {}
+        if hasattr(self, "episodes_meta") and idx < len(self.episodes_meta):
+            env_info.update(dict(self.episodes_meta[idx]))
+        for key in ["env_id", "master_seed"]:
+            if key in getattr(self, "meta", {}):
+                env_info[key] = self.meta[key]
+        return obs, act, state, env_info
 
     def __getitem__(self, idx):
         return self.get_frames(idx, range(self.get_seq_length(idx)))
