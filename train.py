@@ -226,12 +226,23 @@ class Trainer:
         print(f"Proprio encoder type: {type(self.proprio_encoder)}")
         self.proprio_encoder = self.accelerator.prepare(self.proprio_encoder)
 
-        self.action_encoder = hydra.utils.instantiate(
-            self.cfg.action_encoder,
-            in_chans=self.datasets["train"].action_dim,
-            emb_dim=self.cfg.action_emb_dim,
-        )
-        action_emb_dim = self.action_encoder.emb_dim
+        target = getattr(self.cfg.action_encoder, "_target_", "")
+
+        if target == "models.proprio.ProprioceptiveEmbedding":
+            self.action_encoder = hydra.utils.instantiate(
+                self.cfg.action_encoder,
+                in_chans=self.datasets["train"].action_dim,
+                emb_dim=self.cfg.action_emb_dim,
+            )
+            action_emb_dim = self.action_encoder.emb_dim
+
+        elif target == "models.inverse_dynamics.InverseDynamicsProjector":
+            # loads the inverse-dynamics model exactly as defined in the config
+            self.action_encoder = hydra.utils.instantiate(self.cfg.action_encoder)
+            action_emb_dim = self.action_encoder.output_dim
+        else:
+            raise ValueError(f"Unknown action_encoder target: {target}")
+        
         print(f"Action encoder type: {type(self.action_encoder)}")
 
         self.action_encoder = self.accelerator.prepare(self.action_encoder)

@@ -7,5 +7,5 @@ n_embd: 120
 # output_dim: for sim environments, set it to the state-based observation dimension.
 # for real environments, set it to the estimated underlying environment state dimension.
 # (e.g. if we have a 7DoF robot arm and a free rigid object, 16 should work fine)
-output_dim: 1 # discrete actions 
+output_dim: 10 
 dropout: 0.0
