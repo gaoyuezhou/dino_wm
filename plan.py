@@ -451,7 +451,7 @@ def planning_main(cfg_dict):
         wandb_run = None
 
     ckpt_base_path = cfg_dict["ckpt_base_path"]
-    model_path = f"{ckpt_base_path}/outputs/{cfg_dict['model_name']}/"
+    model_path = f"{ckpt_base_path}"
     with open(os.path.join(model_path, "hydra.yaml"), "r") as f:
         model_cfg = OmegaConf.load(f)
 
