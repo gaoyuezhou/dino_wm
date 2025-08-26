@@ -1,5 +1,5 @@
 _target_: models.inverse_dynamics.InverseDynamicsProjector
-window_size: ${window_size}
+window_size:
 input_dim: ${encoder.output_dim}
 n_layer: 6
 n_head: 6

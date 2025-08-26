@@ -31,7 +31,7 @@ class InverseDynamicsProjector(nn.Module):
         print(f"number of views: {V}")
         obs_proj = []
         for i in range(V):
-            this_view_proj = self.model(obs_enc[:, :, i])  # (B, T, Z)
+            this_view_proj = self.model(obs_enc[:, :, i])  
             obs_proj.append(this_view_proj)
         return torch.stack(obs_proj, dim=2)  # (B, T, V, Z) v = Views 
 

@@ -3,6 +3,7 @@ import torch.nn as nn
 from torchvision import transforms
 from einops import rearrange, repeat
 from .inverse_dynamics import InverseDynamicsProjector
+
 class VWorldModel(nn.Module):
     def __init__(
         self,
@@ -88,55 +89,107 @@ class VWorldModel(nn.Module):
         if self.decoder is not None:
             self.decoder.eval()
 
-    def encode(self, obs, act): 
+    def encode(self, obs, act):
         """
-        input :  obs (dict): "visual", "proprio", (b, num_frames, 3, img_size, img_size) 
-        output:    z (tensor): (b, num_frames, num_patches, emb_dim)
+        input :  obs: dict with "visual" (B,T,3,H,W), "proprio" (B,T,...)
+        expects encode_obs to return:
+            z_dct["visual_tokens"] : (B,T,F,Cv)
+            z_dct["visual_frame"]  : (B,T,1,Cv)  # per-frame/CLS
+            z_dct["proprio"]       : (B,T,Cp)
         """
         z_dct = self.encode_obs(obs)
-        act_emb = self.encode_act(act, z_dct['visual'])
+
+        # Get action embedding; for inverse projector we pass observations only
+        act_emb = self.encode_act(act, z_dct["visual_frame"])
+        # act_emb shapes:
+        #   inverse projector -> (B,T,1,Za)
+        #   non-inverse (e.g., MLP on actions) -> (B,T,Za)
+
+        visual = z_dct["visual_tokens"]  # (B,T,F,Cv)
+        proprio = z_dct["proprio"]       # (B,T,Cp)
+        F = visual.shape[2]
+
         if self.concat_dim == 0:
-            z = torch.cat(
-                    [z_dct['visual'], z_dct['proprio'].unsqueeze(2), act_emb.unsqueeze(2)], dim=2 # add as an extra token
-                )  # (b, num_frames, num_patches + 2, dim)
-        if self.concat_dim == 1:
-            proprio_tiled = repeat(z_dct['proprio'].unsqueeze(2), "b t 1 a -> b t f a", f=z_dct['visual'].shape[2])
-            proprio_repeated = proprio_tiled.repeat(1, 1, 1, self.num_proprio_repeat)
-            act_tiled = repeat(act_emb.unsqueeze(2), "b t 1 a -> b t f a", f=z_dct['visual'].shape[2])
-            act_repeated = act_tiled.repeat(1, 1, 1, self.num_action_repeat)
-            z = torch.cat(
-                [z_dct['visual'], proprio_repeated, act_repeated], dim=3
-            )  # (b, num_frames, num_patches, dim + action_dim)
+            # Token-level concat: add proprio + action as extra tokens
+            proprio_tok = proprio.unsqueeze(2)     # (B,T,1,Cp)
+
+            if act_emb.dim() == 4:
+                act_tok = act_emb                  # already (B,T,1,Za)
+            elif act_emb.dim() == 3:
+                act_tok = act_emb.unsqueeze(2)     # (B,T,1,Za)
+            else:
+                raise ValueError(f"Unexpected act_emb shape {act_emb.shape}")
+
+            z = torch.cat([visual, proprio_tok, act_tok], dim=2)  # (B,T,F+2, ...)
+
+        elif self.concat_dim == 1:
+            # Channel-level concat: tile per token
+            proprio_tiled = repeat(proprio.unsqueeze(2), "b t 1 a -> b t f a", f=F)
+            proprio_rep = proprio_tiled.repeat(1, 1, 1, getattr(self, "num_proprio_repeat", 1))
+
+            if act_emb.dim() == 4:
+                # (B,T,1,Za) -> (B,T,F,Za) without copy
+                act_tiled = act_emb.expand(-1, -1, F, -1)
+            elif act_emb.dim() == 3:
+                # (B,T,Za) -> (B,T,1,Za) -> (B,T,F,Za)
+                act_tiled = act_emb.unsqueeze(2).expand(-1, -1, F, -1)
+            else:
+                raise ValueError(f"Unexpected act_emb shape {act_emb.shape}")
+
+            act_rep = act_tiled.repeat(1, 1, 1, getattr(self, "num_action_repeat", 1))
+
+            z = torch.cat([visual, proprio_rep, act_rep], dim=3)  # (B,T,F,Cv + Cp*rep + Za*rep)
+
+        else:
+            raise ValueError(f"Unknown concat_dim: {self.concat_dim}")
+
         return z
     
     def encode_act(self, act, obs_emb=None):
         if isinstance(self.action_encoder, InverseDynamicsProjector) and obs_emb is not None:
             print(f"obs_emb: {obs_emb} and {obs_emb.shape}")
-            act = self.action_encoder(obs_emb)
+            act = self.action_encoder(obs_emb) #(B,T,1,D)
             print(f"Projected action: {act} and {act.shape}")
         else:
-            act = self.action_encoder(act)
+            act = self.action_encoder(act) # (B,T,D)
         return act
     
     def encode_proprio(self, proprio):
         proprio = self.proprio_encoder(proprio)
         return proprio
-
+    
     def encode_obs(self, obs):
         """
-        input : obs (dict): "visual", "proprio" (b, t, 3, img_size, img_size)
-        output:   z (dict): "visual", "proprio" (b, t, num_patches, encoder_emb_dim)
+        input : obs (dict): keys "visual" (B,T,3,H,W), "proprio" (B,T, ...)
+        output: z (dict):
+        - "visual_tokens": (B, T, P, C)   # patch tokens for predictor
+        - "visual_frame":  (B, T, 1, C)   # per-frame embedding for inverse projector
+        - "proprio":       (B, T, Pp)     # whatever your encode_proprio returns
         """
-        visual = obs['visual']
-        b = visual.shape[0]
-        visual = rearrange(visual, "b t ... -> (b t) ...")
-        visual = self.encoder_transform(visual)
-        visual_embs = self.encoder.forward(visual)
-        visual_embs = rearrange(visual_embs, "(b t) p d -> b t p d", b=b)
+        visual = obs["visual"]                        # (B, T, 3, H, W)
+        B = visual.shape[0]
+        visual = rearrange(visual, "b t c h w -> (b t) c h w")
 
-        proprio = obs['proprio']
+        # your preprocessing
+        visual = self.encoder_transform(visual)
+
+        out = self.encoder(visual)                    # ONE pass
+        if isinstance(out, tuple):
+            pt, cf = out                              # (BT,N,C), (BT,1,C)
+        else:
+            # backward-compat: only patches returned → synthesize frame embed by mean
+            pt = out                                  # (BT,N,C)
+            cf = pt.mean(dim=1, keepdim=True)         # (BT,1,C)
+
+        # reshape back to (B,T,...)
+        visual_tokens = rearrange(pt, "(b t) n c -> b t n c", b=B)
+        visual_frame  = rearrange(cf, "(b t) n c -> b t n c", b=B)  # n=1
+
+        proprio = obs["proprio"]
         proprio_emb = self.encode_proprio(proprio)
-        return {"visual": visual_embs, "proprio": proprio_emb}
+
+        return {"visual_tokens": visual_tokens, "visual_frame": visual_frame, "proprio": proprio_emb}
+
 
     def predict(self, z):  # in embedding space
         """
