@@ -1,0 +1,12 @@
+views: 2
+action_dim: 2
+
+workspace:
+  _target_: workspaces.block_push_multiview.BlockPushMultiviewWorkspace
+
+dataset:
+  _target_: datasets.block_pushing.PushMultiviewTrajectoryDataset
+  data_directory: ${env_vars.datasets.block_push}
+  onehot_goals: False
+  subset_fraction: ${subset_fraction}
+  prefetch: True

@@ -1,0 +1,9 @@
+views: 2
+action_dim: 7
+
+workspace:
+  _target_: workspaces.libero_goal.LiberoGoalWorkspace
+
+dataset:
+  _target_: datasets.libero.LiberoGoalDataset
+  data_directory: ${env_vars.datasets.libero}

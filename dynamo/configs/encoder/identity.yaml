@@ -1,0 +1,2 @@
+_target_: torch.nn.Identity
+output_dim: ${env.obs_dim}

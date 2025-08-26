@@ -1,0 +1,53 @@
+defaults:
+  - _self_
+  - encoder: resnet18_random
+  - projector: inverse_dynamics_blockpush
+  - ssl: dynamo_blockpush
+  - env: block_push_multiview
+  - env_vars: env_vars
+
+# Dataset details
+subset_fraction: null
+train_fraction: 0.95
+batch_size: 64  # across all processes
+num_workers: 15  # per process
+window_size: 5
+goal_conditional: null
+goal_seq_len: 0
+min_future_sep: 0
+num_extra_predicted_actions: 0
+
+# Training details
+ssl_lr: 1e-4
+ssl_weight_decay: 0.0
+betas:
+  - 0.9
+  - 0.999
+clip_grad_norm: 0.1
+seed: 42
+timeout_seconds: 18000
+
+sync_bn: True
+use_lr_scheduling: True
+warmup_epochs: 5
+num_epochs: 40
+
+save_every_epochs: 10
+
+# Eval config
+eval_offline: True
+
+# Wandb config
+project: dynamo-repro
+experiment: train_blockpush_dynamo
+
+# hydra config
+hydra:
+  job:
+    override_dirname: ${experiment}
+    chdir: False
+  run:
+    dir: ./exp_local/${now:%Y.%m.%d}/${now:%H%M%S}_${experiment}
+  sweep:
+    dir: ./exp_local/${now:%Y.%m.%d}/sweep_${now:%H%M%S}_${experiment}
+    subdir: ${hydra.job.num}

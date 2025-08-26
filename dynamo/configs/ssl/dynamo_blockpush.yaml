@@ -1,0 +1,20 @@
+_target_: models.ssl.dynamo.DynaMoSSL
+window_size: ${window_size}
+feature_dim: ${encoder.output_dim}
+projection_dim: ${projector.output_dim}
+n_layer: 4
+n_head: 4
+n_embd: 72
+
+dropout: 0.3 # dropout on the forward dynamics model
+covariance_reg_coef: 0.04
+dynamics_loss_coef: 1.0
+
+ema_beta: 0.99
+beta_scheduling: True
+projector_use_ema: True
+
+lr: ${ssl_lr}
+weight_decay: ${ssl_weight_decay}
+betas: ${betas}
+separate_single_views: True

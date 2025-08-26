@@ -1,0 +1,11 @@
+views: 1
+action_dim: 2
+
+workspace:
+  _target_: workspaces.pusht.PushTWorkspace
+
+dataset:
+  _target_: datasets.pusht.PushTDataset
+  data_directory: ${env_vars.datasets.pusht}
+  subset_fraction: ${subset_fraction}
+  relative: ${relative}
