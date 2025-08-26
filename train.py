@@ -228,20 +228,28 @@ class Trainer:
 
         target = getattr(self.cfg.action_encoder, "_target_", "")
 
+        target = getattr(self.cfg.action_encoder, "_target_", "")
+
         if target == "models.proprio.ProprioceptiveEmbedding":
-            self.action_encoder = hydra.utils.instantiate(
-                self.cfg.action_encoder,
-                in_chans=self.datasets["train"].action_dim,
-                emb_dim=self.cfg.action_emb_dim,
-            )
-            action_emb_dim = self.action_encoder.emb_dim
+            # only build if nothing came from the checkpoint
+            if getattr(self, "action_encoder", None) is None:
+                self.action_encoder = hydra.utils.instantiate(
+                    self.cfg.action_encoder,
+                    in_chans=self.datasets["train"].action_dim,
+                    emb_dim=self.cfg.action_emb_dim,
+                )
+            # pick up the dim from the instance (fallback to cfg)
+            action_emb_dim = getattr(self.action_encoder, "emb_dim", self.cfg.action_emb_dim)
 
         elif target == "models.inverse_dynamics.InverseDynamicsProjector":
-            # loads the inverse-dynamics model exactly as defined in the config
-            self.action_encoder = hydra.utils.instantiate(self.cfg.action_encoder)
-            action_emb_dim = self.action_encoder.output_dim
+            # only build if nothing came from the checkpoint
+            if getattr(self, "action_encoder", None) is None:
+                self.action_encoder = hydra.utils.instantiate(self.cfg.action_encoder)
+            # projector’s own output size (your config uses 1)
+            action_emb_dim = getattr(self.action_encoder, "output_dim", 1)
+
         else:
-            raise ValueError(f"Unknown action_encoder target: {target}")
+            raise ValueError(f"Unknown action_encoder target: {target}"
         
         print(f"Action encoder type: {type(self.action_encoder)}")
 
