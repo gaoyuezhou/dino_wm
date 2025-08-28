@@ -341,27 +341,76 @@ class VWorldModel(nn.Module):
 
     def rollout(self, obs_0, act):
         """
-        input:  obs_0 (dict): (b, n, 3, img_size, img_size)
-                  act: (b, t+n, action_dim)
-        output: embeddings of rollout obs
-                visuals: (b, t+n+1, 3, img_size, img_size)
-                z: (b, t+n+1, num_patches, emb_dim)
+        input:
+        obs_0 (dict): {"visual": (B, n, 3, H, W), ...}
+        act:
+            - Raw actions:           (B, n+t, A)
+            - Pre-embedded actions:  (B, n+t, 1, D)   # e.g., from inverse projector
+
+        output:
+        z_obses: (B, n+t+1, F, C)   # observation embeddings for each step
+        z:       (B, n+t+1, F, C)   # full latent sequence after injection
         """
+        B = obs_0["visual"].shape[0]
         num_obs_init = obs_0['visual'].shape[1]
-        act_0 = act[:, :num_obs_init]
-        action = act[:, num_obs_init:] 
-        z = self.encode(obs_0, act_0)
+
+        # Detect whether 'act' is pre-embedded (4D) or raw (3D)
+        is_embedded = (act is not None) and (act.dim() == 4)
+
+        if is_embedded:
+            # Pre-embedded actions (B, n+t, 1, D)
+            act_0_emb = act[:, :num_obs_init]          # (B, n, 1, D)
+            action_emb = act[:, num_obs_init:]         # (B, t, 1, D)
+
+            # For embedded actions we DO NOT re-encode actions in the context.
+            # If your action encoder is inverse, encode_act(obs_emb) will compute context actions internally.
+            z = self.encode(obs_0, act=None)           # (B, n, F, C)
+
+        else:
+            # Raw actions (B, n+t, A) — original path
+            act_0  = act[:, :num_obs_init]             # (B, n, A)
+            action = act[:, num_obs_init:]             # (B, t, A)
+            z = self.encode(obs_0, act_0)              # (B, n, F, C)
+
+        # Autoregressive rollout
         t = 0
         inc = 1
-        while t < action.shape[1]:
-            z_pred = self.predict(z[:, -self.num_hist :])
-            z_new = z_pred[:, -inc:, ...]
-            z_new = self.replace_actions_from_z(z_new, action[:, t : t + inc, :])
-            z = torch.cat([z, z_new], dim=1)
-            t += inc
+        if is_embedded:
+            T_future = action_emb.shape[1]
+            while t < T_future:
+                z_pred = self.predict(z[:, -self.num_hist :])   # (B, h, F, C)
+                z_new  = z_pred[:, -inc:, ...]                  # (B, 1, F, C)
 
+                # Inject pre-embedded action (skip encode_act to avoid double-encoding)
+                if self.concat_dim == 0:
+                    # Action occupies its own token at the end
+                    z_new[:, :, -1, :] = action_emb[:, t : t + inc, :].squeeze(2)  # (B,1,D)
+                elif self.concat_dim == 1:
+                    # Action concatenated in channel dimension for each token
+                    F = z_new.shape[2]
+                    step_emb = action_emb[:, t : t + inc, :]                        # (B,1,1,D)
+                    act_tiled = step_emb.expand(-1, -1, F, -1)                      # (B,1,F,D)
+                    rep = getattr(self, "num_action_repeat", 1)
+                    act_rep = act_tiled.repeat(1, 1, 1, rep)                         # (B,1,F,D*rep)
+                    z_new[..., -act_rep.shape[-1]:] = act_rep
+                else:
+                    raise ValueError(f"Unknown concat_dim: {self.concat_dim}")
+
+                z = torch.cat([z, z_new], dim=1)
+                t += inc
+        else:
+            T_future = action.shape[1]
+            while t < T_future:
+                z_pred = self.predict(z[:, -self.num_hist :])   # (B, h, F, C)
+                z_new  = z_pred[:, -inc:, ...]                  # (B, 1, F, C)
+                z_new  = self.replace_actions_from_z(z_new, action[:, t : t + inc, :])
+                z = torch.cat([z, z_new], dim=1)
+                t += inc
+
+        # Final extra prediction (no action injection) to get length n+t+1
         z_pred = self.predict(z[:, -self.num_hist :])
-        z_new = z_pred[:, -1 :, ...] # take only the next pred
-        z = torch.cat([z, z_new], dim=1)
+        z_new  = z_pred[:, -1 :, ...]
+        z      = torch.cat([z, z_new], dim=1)
+
         z_obses, z_acts = self.separate_emb(z)
         return z_obses, z

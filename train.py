@@ -669,6 +669,7 @@ class Trainer:
                 traj_idx = np.random.randint(0, len(dset))
                 obs, act, state, _ = dset[traj_idx]
                 act = act.to(self.device)
+
                 if rand_start_end:
                     if obs["visual"].shape[0] > min_horizon * self.cfg.frameskip + 1:
                         start = np.random.randint(
@@ -686,46 +687,60 @@ class Trainer:
                     start = 0
                     horizon = (obs["visual"].shape[0] - 1) // self.cfg.frameskip
 
+            # Downsample the clip by frameskip → length becomes horizon+1 frames
             for k in obs.keys():
                 obs[k] = obs[k][
-                    start : 
-                    start + horizon * self.cfg.frameskip + 1 : 
+                    start :
+                    start + horizon * self.cfg.frameskip + 1 :
                     self.cfg.frameskip
                 ]
-            act = act[start : start + horizon * self.cfg.frameskip]
-            if act.ndim == 1:
-               act = act.unsqueeze(-1)  # shape [T] -> [T, 1]
-            act = rearrange(act, "(h f) d -> h (f d)", f=self.cfg.frameskip)
 
+            # Prepare GT last target embedding for evaluation
             obs_g = {}
             for k in obs.keys():
-                obs_g[k] = obs[k][-1].unsqueeze(0).unsqueeze(0).to(self.device)
+                obs_g[k] = obs[k][-1].unsqueeze(0).unsqueeze(0).to(self.device)  # (B=1,T=1,...)
             z_g = self.model.encode_obs(obs_g)
-            actions = act.unsqueeze(0)
 
-            for past in num_past:
-                n_past, postfix = past
+            # -------- compute actions_for_rollout (only difference between paths) --------
+            use_inverse = isinstance(self.model.action_encoder, InverseDynamicsProjector)
 
-                obs_0 = {}
-                for k in obs.keys():
-                    obs_0[k] = (
-                        obs[k][:n_past].unsqueeze(0).to(self.device)
-                    )  # unsqueeze for batch, (b, t, c, h, w)
+            if use_inverse:
+                # INVERSE PROJECTOR: compute embedded actions from full observation window
+                obs_full = {k: v.unsqueeze(0).to(self.device) for k, v in obs.items()}  # (1, T_total, ...)
+                z_full = self.model.encode_obs(obs_full)                                 # has "visual_frame"
+                frames = z_full["visual_frame"]                                          # (1, T_total, 1, Cv)
 
-                z_obses, z = self.model.rollout(obs_0, actions)
+                # Project ALL actions; projector returns (B,T,1,D) per frame → align to transitions
+                act_full_emb = self.model.encode_act(act=None, obs_emb=frames)           # (1, T_total, 1, D)
+                T_total = obs_full["visual"].shape[1]
+                actions_for_rollout = act_full_emb[:, :-1]                               # (1, T_total-1, 1, D)
+            else:
+                # STANDARD PATH: use dataset actions (downsampled + frameskip-packed)
+                act_ds = act[start : start + horizon * self.cfg.frameskip]
+                if act_ds.ndim == 1:
+                    act_ds = act_ds.unsqueeze(-1)  # [T] -> [T,1]
+                act_ds = rearrange(act_ds, "(h f) d -> h (f d)", f=self.cfg.frameskip)  # (horizon, frameskip*d)
+                actions_for_rollout = act_ds.unsqueeze(0)                                # (1, horizon, packed_dim)
+
+            # ------------------- shared loop over context settings -------------------
+            for n_past, postfix in num_past:
+                # Build context observations (first n_past frames only)
+                obs_0 = {k: v[:n_past].unsqueeze(0).to(self.device) for k, v in obs.items()}  # (1, n_past, ...)
+
+                # Call model.rollout with the precomputed actions for the WHOLE segment.
+                # In inverse mode, actions_for_rollout is (1, n_past + t, 1, D)
+                # In standard mode, it's (1, n_past + t, A_packed) after internal split in rollout.
+                z_obses, z = self.model.rollout(obs_0, actions_for_rollout)
+
+                # Eval divergence on the last predicted obs vs GT last obs embedding
                 z_obs_last = slice_trajdict_with_t(z_obses, start_idx=-1, end_idx=None)
                 div_loss = self.err_eval_single(z_obs_last, z_g)
-
                 for k in div_loss.keys():
                     log_key = f"z_{k}_err_rollout{postfix}"
                     if log_key in logs:
-                        logs[f"z_{k}_err_rollout{postfix}"].append(
-                            div_loss[k]
-                        )
+                        logs[log_key].append(div_loss[k])
                     else:
-                        logs[f"z_{k}_err_rollout{postfix}"] = [
-                            div_loss[k]
-                        ]
+                        logs[log_key] = [div_loss[k]]
 
                 if self.cfg.has_decoder:
                     visuals = self.model.decode_obs(z_obses)[0]["visual"]
@@ -735,10 +750,10 @@ class Trainer:
                         obs["visual"].shape[0],
                         f"{plotting_dir}/e{self.epoch}_{mode}_{idx}{postfix}.png",
                     )
-        logs = {
-            key: sum(values) / len(values) for key, values in logs.items() if values
-        }
+
+        logs = {key: sum(values) / len(values) for key, values in logs.items() if values}
         return logs
+
 
     def logs_update(self, logs):
         for key, value in logs.items():
