@@ -162,35 +162,40 @@ class VWorldModel(nn.Module):
     
     def encode_obs(self, obs):
         """
-        input : obs (dict): keys "visual" (B,T,3,H,W), "proprio" (B,T, ...)
-        output: z (dict):
-        - "visual_tokens": (B, T, P, C)   # patch tokens for predictor
-        - "visual_frame":  (B, T, 1, C)   # per-frame embedding for inverse projector
-        - "proprio":       (B, T, Pp)     # whatever your encode_proprio returns
+        input : obs (dict): keys
+            "visual":  (B,T,3,H,W)
+            "proprio": (B,T,...)
+        output: dict:
+            - "visual_tokens": (B, T, N, C)   # patch tokens
+            - "visual_frame":  (B, T, 1, C)   # per-frame embedding
+            - "proprio":       (B, T, Pp)     # proprio embedding
         """
-        visual = obs["visual"]                        # (B, T, 3, H, W)
-        B = visual.shape[0]
-        visual = rearrange(visual, "b t c h w -> (b t) c h w")
+        visual = obs["visual"]   # (B,T,3,H,W)
+        B, T = visual.shape[:2]
 
-        # your preprocessing
-        visual = self.encoder_transform(visual)
+        # run preprocessing on flattened frames
+        v_bt = rearrange(visual, "b t c h w -> (b t) c h w")
+        v_bt = self.encoder_transform(v_bt)
 
-        out = self.encoder(visual)                    # ONE pass
+        # restore (B,T,3,H,W) for DinoV2Encoder (it does its own flatten)
+        visual = rearrange(v_bt, "(b t) c h w -> b t c h w", b=B, t=T)
+
+        out = self.encoder(visual)  # returns (B,T,N,C) or tuple
+
         if isinstance(out, tuple):
-            pt, cf = out                              # (BT,N,C), (BT,1,C)
+            pt, cf = out                    # (B,T,N,C), (B,T,1,C)
         else:
-            # backward-compat: only patches returned → synthesize frame embed by mean
-            pt = out                                  # (BT,N,C)
-            cf = pt.mean(dim=1, keepdim=True)         # (BT,1,C)
-
-        # reshape back to (B,T,...)
-        visual_tokens = rearrange(pt, "(b t) n c -> b t n c", b=B)
-        visual_frame  = rearrange(cf, "(b t) n c -> b t n c", b=B)  # n=1
+            pt = out                        # (B,T,N,C)
+            cf = pt.mean(dim=2, keepdim=True)  # (B,T,1,C)
 
         proprio = obs["proprio"]
         proprio_emb = self.encode_proprio(proprio)
 
-        return {"visual_tokens": visual_tokens, "visual_frame": visual_frame, "proprio": proprio_emb}
+        return {
+            "visual_tokens": pt,
+            "visual_frame": cf,
+            "proprio": proprio_emb,
+        }
 
 
     def predict(self, z):  # in embedding space

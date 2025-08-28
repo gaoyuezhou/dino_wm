@@ -6,7 +6,7 @@ dataset:
   _target_: "datasets.rearrange_dset.load_rearrange_slice_train_val"
   n_rollout: null
   normalize_action: ${normalize_action}
-  data_path: '/Users/julianquast/Documents/Bachelor Thesis/Datasets/rearrange_2k_v1_zip/rearrange_2000'
+  data_path: /content/rearrange_200_v1
   split_ratio: 0.9
   filter_train: false
   filter_val: false
