@@ -29,7 +29,7 @@ class InverseDynamicsProjector(nn.Module):
 
     def forward(self, obs_enc: torch.Tensor):
         N, T, V = obs_enc.shape[:3]
-        print(f"number of views: {V}")
+        #print(f"number of views: {V}")
         obs_proj = []
         for i in range(V):
             this_view_proj = self.model(obs_enc[:, :, i])  
