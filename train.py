@@ -648,7 +648,13 @@ class Trainer:
             self.logs_update(loss_components)
 
     def openloop_rollout(
-        self, dset, num_rollout=10, rand_start_end=True, min_horizon=2, mode="train"
+        self,
+        dset,
+        num_rollout=10,
+        rand_start_end=True,
+        min_horizon=2,
+        mode="train",
+        fixed_horizon=8,   # <-- NEW: deterministic horizon target (default 8)
     ):
         np.random.seed(self.cfg.training.seed)
         min_horizon = min_horizon + self.cfg.num_hist
@@ -658,11 +664,11 @@ class Trainer:
         self.accelerator.wait_for_everyone()
         logs = {}
 
-        # rollout with both num_hist and 1 frame as context
+        # evaluate with both num_hist and 1 frame as context
         num_past = [(self.cfg.num_hist, ""), (1, "_1framestart")]
 
-        # sample traj
         for idx in range(num_rollout):
+            # -------- sample a valid trajectory window (start can remain random) --------
             valid_traj = False
             while not valid_traj:
                 traj_idx = np.random.randint(0, len(dset))
@@ -677,69 +683,74 @@ class Trainer:
                         )
                     else:
                         start = 0
-                    max_horizon = (obs["visual"].shape[0] - start - 1) // self.cfg.frameskip
-                    if max_horizon > min_horizon:
-                        valid_traj = True
-                        horizon = np.random.randint(min_horizon, max_horizon + 1)
                 else:
-                    valid_traj = True
                     start = 0
-                    horizon = (obs["visual"].shape[0] - 1) // self.cfg.frameskip
 
-            # Downsample the clip by frameskip → length becomes horizon+1 frames
+                # max horizon allowed by data
+                max_horizon_data = (obs["visual"].shape[0] - start - 1) // self.cfg.frameskip
+
+                # if inverse projector is used, also respect its block_size (we pass horizon+1 obs)
+                use_inverse = isinstance(self.model.action_encoder, InverseDynamicsProjector)
+                if use_inverse:
+                    block_size = getattr(self.model.action_encoder, "block_size", None)
+                    if block_size is not None:
+                        max_horizon_model = max(0, block_size - 1)
+                        max_horizon = min(max_horizon_data, max_horizon_model)
+                    else:
+                        max_horizon = max_horizon_data
+                else:
+                    max_horizon = max_horizon_data
+
+                # -------- deterministic horizon: cap by data/model, not random --------
+                horizon = min(max_horizon, max(min_horizon, fixed_horizon))
+                valid_traj = (horizon >= min_horizon and max_horizon >= min_horizon)
+
+            # -------- downsample obs by frameskip → length = horizon+1 --------
             for k in obs.keys():
                 obs[k] = obs[k][
                     start :
                     start + horizon * self.cfg.frameskip + 1 :
                     self.cfg.frameskip
                 ]
+            T_total = obs["visual"].shape[0]     # == horizon + 1
+            expected_actions = T_total - 1       # == horizon
 
-            # Prepare GT last target embedding for evaluation
-            obs_g = {}
-            for k in obs.keys():
-                obs_g[k] = obs[k][-1].unsqueeze(0).unsqueeze(0).to(self.device)  # (B=1,T=1,...)
+            # -------- target (GT last obs emb) for evaluation --------
+            obs_g = {k: obs[k][-1].unsqueeze(0).unsqueeze(0).to(self.device) for k in obs.keys()}
             z_g = self.model.encode_obs(obs_g)
 
-            # -------- compute actions_for_rollout (only difference between paths) --------
-            use_inverse = isinstance(self.model.action_encoder, InverseDynamicsProjector)
-
+            # -------- compute actions_for_rollout (only branch that differs) --------
             if use_inverse:
-                # INVERSE PROJECTOR: compute embedded actions from full observation window
+                # INVERSE PROJECTOR: pass FULL (horizon+1) clip once
                 obs_full = {k: v.unsqueeze(0).to(self.device) for k, v in obs.items()}  # (1, T_total, ...)
-                z_full = self.model.encode_obs(obs_full)                                 # has "visual_frame"
-                frames = z_full["visual_frame"]                                          # (1, T_total, 1, Cv)
+                z_full   = self.model.encode_obs(obs_full)                               # has "visual_frame"
+                frames   = z_full["visual_frame"]                                        # (1, T_total, 1, Cv)
 
-                # Project ALL actions; projector returns (B,T,1,D) per frame → align to transitions
+                # Project per-frame actions; projector returns (B,T_total,1,D)
                 act_full_emb = self.model.encode_act(act=None, obs_emb=frames)           # (1, T_total, 1, D)
-                T_total = obs_full["visual"].shape[1]
-                actions_for_rollout = act_full_emb[:, :-1]                               # (1, T_total-1, 1, D)
+
+                # Keep exactly one action per transition (horizon)
+                actions_for_rollout = act_full_emb[:, :expected_actions]                 # (1, horizon, 1, D)
+                assert actions_for_rollout.shape[1] == expected_actions
             else:
-                # STANDARD PATH: use dataset actions (downsampled + frameskip-packed)
-                act_ds = act[start : start + horizon * self.cfg.frameskip]
-                if act_ds.ndim == 1:
-                    act_ds = act_ds.unsqueeze(-1)  # [T] -> [T,1]
-                act_ds = rearrange(act_ds, "(h f) d -> h (f d)", f=self.cfg.frameskip)  # (horizon, frameskip*d)
+                # STANDARD PATH: use dataset actions (micro → packed)
+                micro = act[start : start + expected_actions * self.cfg.frameskip]
+                if micro.ndim == 1:
+                    micro = micro.unsqueeze(-1)  # [T] -> [T,1]
+                act_ds = rearrange(micro, "(h f) d -> h (f d)", f=self.cfg.frameskip)   # (horizon, packed_dim)
                 actions_for_rollout = act_ds.unsqueeze(0)                                # (1, horizon, packed_dim)
+                assert actions_for_rollout.shape[1] == expected_actions
 
-            # ------------------- shared loop over context settings -------------------
+            # -------- shared loop over context settings --------
             for n_past, postfix in num_past:
-                # Build context observations (first n_past frames only)
                 obs_0 = {k: v[:n_past].unsqueeze(0).to(self.device) for k, v in obs.items()}  # (1, n_past, ...)
-
-                # Call model.rollout with the precomputed actions for the WHOLE segment.
-                # In inverse mode, actions_for_rollout is (1, n_past + t, 1, D)
-                # In standard mode, it's (1, n_past + t, A_packed) after internal split in rollout.
                 z_obses, z = self.model.rollout(obs_0, actions_for_rollout)
 
-                # Eval divergence on the last predicted obs vs GT last obs embedding
                 z_obs_last = slice_trajdict_with_t(z_obses, start_idx=-1, end_idx=None)
                 div_loss = self.err_eval_single(z_obs_last, z_g)
                 for k in div_loss.keys():
                     log_key = f"z_{k}_err_rollout{postfix}"
-                    if log_key in logs:
-                        logs[log_key].append(div_loss[k])
-                    else:
-                        logs[log_key] = [div_loss[k]]
+                    logs.setdefault(log_key, []).append(div_loss[k])
 
                 if self.cfg.has_decoder:
                     visuals = self.model.decode_obs(z_obses)[0]["visual"]
@@ -750,8 +761,9 @@ class Trainer:
                         f"{plotting_dir}/e{self.epoch}_{mode}_{idx}{postfix}.png",
                     )
 
-        logs = {key: sum(values) / len(values) for key, values in logs.items() if values}
+        logs = {key: sum(vals) / len(vals) for key, vals in logs.items() if vals}
         return logs
+
 
 
     def logs_update(self, logs):
