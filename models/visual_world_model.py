@@ -98,7 +98,7 @@ class VWorldModel(nn.Module):
             z_dct["proprio"]       : (B,T,Cp)
         """
         z_dct = self.encode_obs(obs)
-        print(f"z_dct: {z_dct} and shapes {[v.shape for v in z_dct.values()]}")
+        #print(f"z_dct: {z_dct} and shapes {[v.shape for v in z_dct.values()]}")
 
         # Get action embedding; for inverse projector we pass observations only
         act_emb = self.encode_act(act, z_dct["visual_frame"])
