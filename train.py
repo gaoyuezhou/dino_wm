@@ -248,7 +248,7 @@ class Trainer:
             action_emb_dim = getattr(self.action_encoder, "output_dim", 1)
 
         else:
-            raise ValueError(f"Unknown action_encoder target: {target}"
+            raise ValueError(f"Unknown action_encoder target: {target}")
         
         print(f"Action encoder type: {type(self.action_encoder)}")
 

@@ -17,6 +17,7 @@ class DinoV2Encoder(nn.Module):
         self.feature_key = feature_key
         self.emb_dim = self.base_model.num_features
         self.patch_size = getattr(self.base_model, "patch_size", None)
+        self.latent_ndim = 2
 
         valid = {"x_norm_patchtokens", "x_norm_clstoken", "both"}
         if feature_key not in valid:
