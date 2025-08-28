@@ -427,9 +427,29 @@ class Trainer:
 
     def err_eval_single(self, z_pred, z_tgt):
         logs = {}
-        for k in z_pred.keys():
+        key_map = {"visual": "visual_tokens"}
+        processed = set()
+
+        for pred_key, tgt_key in key_map.items():
+            if pred_key in z_pred:
+                processed.add(pred_key)
+                if tgt_key in z_tgt:
+                    loss = self.model.emb_criterion(z_pred[pred_key], z_tgt[tgt_key])
+                    logs[pred_key] = loss
+                else:
+                    log.warning(
+                        f"Missing targets for key: {pred_key} (expected '{tgt_key}')"
+                    )
+
+        common = (set(z_pred) - processed) & set(z_tgt)
+        for k in common:
             loss = self.model.emb_criterion(z_pred[k], z_tgt[k])
             logs[k] = loss
+            processed.add(k)
+
+        missing = set(z_pred) - processed
+        if missing:
+            log.warning(f"Missing targets for keys: {missing}")
         return logs
 
     def err_eval(self, z_out, z_tgt, state_tgt=None):
