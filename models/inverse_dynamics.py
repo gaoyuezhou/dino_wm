@@ -25,6 +25,7 @@ class InverseDynamicsProjector(nn.Module):
             dropout=dropout,
         )
         self.model = TransformerEncoder(self.config)
+        self.output_dim = output_dim
 
     def forward(self, obs_enc: torch.Tensor):
         N, T, V = obs_enc.shape[:3]
