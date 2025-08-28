@@ -149,7 +149,7 @@ class VWorldModel(nn.Module):
     
     def encode_act(self, act, obs_emb=None):
         if isinstance(self.action_encoder, InverseDynamicsProjector) and obs_emb is not None:
-            print(f"Used Inverse path, obs_emb: {obs_emb} and {obs_emb.shape}")
+            print(f"Used Inverse path")
             act = self.action_encoder(obs_emb) #(B,T,1,D)
             print(f"Projected action: {act} and {act.shape}")
         else:
