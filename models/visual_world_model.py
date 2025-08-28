@@ -98,6 +98,7 @@ class VWorldModel(nn.Module):
             z_dct["proprio"]       : (B,T,Cp)
         """
         z_dct = self.encode_obs(obs)
+        print(f"z_dct: {z_dct} and shapes {[v.shape for v in z_dct.values()]}")
 
         # Get action embedding; for inverse projector we pass observations only
         act_emb = self.encode_act(act, z_dct["visual_frame"])
@@ -139,6 +140,7 @@ class VWorldModel(nn.Module):
             act_rep = act_tiled.repeat(1, 1, 1, getattr(self, "num_action_repeat", 1))
 
             z = torch.cat([visual, proprio_rep, act_rep], dim=3)  # (B,T,F,Cv + Cp*rep + Za*rep)
+            print(f"Shape z: {z.shape}")
 
         else:
             raise ValueError(f"Unknown concat_dim: {self.concat_dim}")
@@ -147,7 +149,7 @@ class VWorldModel(nn.Module):
     
     def encode_act(self, act, obs_emb=None):
         if isinstance(self.action_encoder, InverseDynamicsProjector) and obs_emb is not None:
-            print(f"obs_emb: {obs_emb} and {obs_emb.shape}")
+            print(f"Used Inverse path, obs_emb: {obs_emb} and {obs_emb.shape}")
             act = self.action_encoder(obs_emb) #(B,T,1,D)
             print(f"Projected action: {act} and {act.shape}")
         else:

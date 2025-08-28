@@ -226,7 +226,6 @@ class Trainer:
         print(f"Proprio encoder type: {type(self.proprio_encoder)}")
         self.proprio_encoder = self.accelerator.prepare(self.proprio_encoder)
 
-        target = getattr(self.cfg.action_encoder, "_target_", "")
 
         target = getattr(self.cfg.action_encoder, "_target_", "")
 

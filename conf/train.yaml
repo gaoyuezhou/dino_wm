@@ -2,7 +2,7 @@ defaults:
   - _self_
   - env: point_maze
   - encoder: dino 
-  - action_encoder: proprio
+  - action_encoder: inverse
   - proprio_encoder: proprio
   - decoder: vqvae
   - predictor: vit
@@ -32,7 +32,7 @@ hydra:
 training:
   seed: 0
   epochs: 60
-  batch_size: 36 # should >= nodes * tasks_per_node
+  batch_size: 16 # should >= nodes * tasks_per_node
   save_every_x_epoch: 1
   reconstruct_every_x_batch: 500
   num_reconstruct_samples: 6
