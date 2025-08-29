@@ -292,7 +292,7 @@ class VWorldModel(nn.Module):
         loss = 0
         loss_components = {}
         z, aux_act = self.encode(obs, act)
-        a = aux_act.get("a") if isinstance(aux_act, dict) else None
+        a = aux_act.get("a_raw") if isinstance(aux_act, dict) else None
         if a is not None:
             l2_pen = self.lambda_l2 * (a ** 2).mean()
             loss = loss + l2_pen
