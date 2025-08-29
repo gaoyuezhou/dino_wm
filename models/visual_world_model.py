@@ -170,10 +170,11 @@ class VWorldModel(nn.Module):
             # Shift left by 1 along T, pad last with final available action
             if a.size(1) > 1:
                 a = torch.cat([a[:, 1:, :, :], a[:, -1:, :, :]], dim=1)  # (B,T,1,Za)
-                a = self.action_dropout(a)
-                if self.action_noise_sigma > 0:
-                    a = a + torch.randn_like(a) * self.action_noise_sigma
-            return a, {"a": a}
+            a_raw = a
+            a = self.action_dropout(a)
+            if self.action_noise_sigma > 0 and self.training:
+                a = a + torch.randn_like(a) * self.action_noise_sigma
+            return a, {"a": a, "a_raw": a_raw}
 
         # Proprio (or other direct) path: encoder likely returns (B,T,Za)
         a = self.action_encoder(act)                  # (B,T,Za) or (B,T,1,Za)
@@ -183,10 +184,7 @@ class VWorldModel(nn.Module):
             pass
         else:
             raise ValueError(f"direct action head must return (B,T,Za) or (B,T,1,Za), got {tuple(a.shape)}")
-        a = self.action_dropout(a)
-        if self.action_noise_sigma > 0:
-            a = a + torch.randn_like(a) * self.action_noise_sigma
-        return a, {"a": a}
+        return a, {"a": a, "a_raw": a}
     
     def encode_proprio(self, proprio):
         proprio = self.proprio_encoder(proprio)
