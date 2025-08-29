@@ -747,7 +747,7 @@ class Trainer:
                 frames   = z_full["visual_frame"]                                        # (1, T_total, 1, Cv)
 
                 # Project per-frame actions; projector returns (B,T_total,1,D)
-                act_full_emb = self.model.encode_act(act=None, obs_emb=frames)           # (1, T_total, 1, D)
+                act_full_emb, _ = self.model.encode_act(act=None, obs_emb=frames)           # (1, T_total, 1, D)
 
                 # Keep exactly one action per transition (horizon)
                 actions_for_rollout = act_full_emb[:, :expected_actions]                 # (1, horizon, 1, D)
