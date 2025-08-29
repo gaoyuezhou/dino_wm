@@ -1,4 +1,0 @@
-_target_: models.encoder.resnet.resnet18
-pretrained: False
-output_dim: 512
-unit_norm: False

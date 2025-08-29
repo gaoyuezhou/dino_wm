@@ -102,8 +102,6 @@ class VWorldModel(nn.Module):
 
         # Get action embedding; for inverse projector we pass observations only
         act_emb = self.encode_act(act, z_dct["visual_frame"])
-        # act_emb shapes:
-        #   inverse projector -> (B,T,1,Za)
         #   non-inverse (e.g., MLP on actions) -> (B,T,Za)
 
         visual = z_dct["visual_tokens"]  # (B,T,F,Cv)
@@ -148,13 +146,31 @@ class VWorldModel(nn.Module):
         return z
     
     def encode_act(self, act, obs_emb=None):
+        """
+        Always return shape (B,T,1,Za).
+        If using an inverse dynamics projector (predicts a_t from (o_t, o_{t+1})):
+        align embeddings so index t gets a_{t+1}, pad last with a_{T-1}.
+        """
+        # Inverse path: obs_emb is (B,T,1,Cv) or similar per-frame embedding
         if isinstance(self.action_encoder, InverseDynamicsProjector) and obs_emb is not None:
-            #print(f"Used Inverse path")
-            act = self.action_encoder(obs_emb) #(B,T,1,D)
-            #print(f"Proprio Action")
+            a = self.action_encoder(obs_emb)          # (B,T,1,Za)
+            if a.dim() != 4 or a.shape[2] != 1:
+                raise ValueError(f"inverse action head must return (B,T,1,Za), got {tuple(a.shape)}")
+
+            # Shift left by 1 along T, pad last with final available action
+            if a.size(1) > 1:
+                a = torch.cat([a[:, 1:, :, :], a[:, -1:, :, :]], dim=1)  # (B,T,1,Za)
+            return a
+
+        # Proprio (or other direct) path: encoder likely returns (B,T,Za)
+        a = self.action_encoder(act)                  # (B,T,Za) or (B,T,1,Za)
+        if a.dim() == 3:
+            a = a.unsqueeze(2)                        # -> (B,T,1,Za)
+        elif a.dim() == 4 and a.shape[2] == 1:
+            pass
         else:
-            act = self.action_encoder(act) # (B,T,D)
-        return act
+            raise ValueError(f"direct action head must return (B,T,Za) or (B,T,1,Za), got {tuple(a.shape)}")
+        return a
     
     def encode_proprio(self, proprio):
         proprio = self.proprio_encoder(proprio)
