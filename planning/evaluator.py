@@ -117,7 +117,7 @@ class PlanEvaluator:  # evaluator for planning
         e_visuals = e_obses["visual"]
         e_final_obs = self._get_trajdict_last(e_obses, action_len * self.frameskip + 1)
         e_final_state = e_states[:, :, -1, :]   # (B, 2, d)
-        print("[CHK e_final_state]", np.asarray(e_final_state).shape)  # exp
+       #print("[CHK e_final_state]", np.asarray(e_final_state).shape)  # exp
 
         # compute eval metrics
         logs, successes = self._compute_rollout_metrics(
@@ -171,6 +171,8 @@ class PlanEvaluator:  # evaluator for planning
 
         e_obs = move_to_device(self.preprocessor.transform_obs(e_obs), self.device)
         e_z_obs = self.wm.encode_obs(e_obs)
+        if "visual" not in e_z_obs and "visual_tokens" in e_z_obs:
+            e_z_obs["visual"] = e_z_obs["visual_tokens"]
         div_visual_emb = torch.norm(e_z_obs["visual"] - i_z_obs["visual"]).item()
         div_proprio_emb = torch.norm(e_z_obs["proprio"] - i_z_obs["proprio"]).item()
 

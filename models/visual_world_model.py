@@ -381,7 +381,14 @@ class VWorldModel(nn.Module):
         if self.concat_dim == 0:
             z[:, :, -1, :] = act_emb
         elif self.concat_dim == 1:
-            act_tiled = repeat(act_emb.unsqueeze(2), "b t 1 a -> b t f a", f=z.shape[2])
+            # act_emb is expected to be (B,T,1,Za). Tile across tokens without
+            # introducing an extra singleton dimension.
+            if act_emb.dim() == 4:
+                act_tiled = repeat(act_emb, "b t 1 a -> b t f a", f=z.shape[2])
+            elif act_emb.dim() == 3:
+                act_tiled = repeat(act_emb.unsqueeze(2), "b t 1 a -> b t f a", f=z.shape[2])
+            else:
+                raise ValueError(f"Unexpected act_emb shape {act_emb.shape}")
             act_repeated = act_tiled.repeat(1, 1, 1, self.num_action_repeat)
             z[..., -self.action_dim:] = act_repeated
         return z
