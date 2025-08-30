@@ -161,7 +161,7 @@ class BeamPlanner(BasePlanner):
       self.wandb_run.log({f"{self.logging_prefix}/loss": float(np.mean(losses_log)), "step": 1})
 
       if self.evaluator is not None:
-          logs, successes, _, _ = self.evaluator.eval_actions(
+          logs, successes, _, _, _ = self.evaluator.eval_actions(
               elite_actions, filename=f"{self.logging_prefix}_output"
           )
           logs = {f"{self.logging_prefix}/{k}": v for k, v in logs.items()}

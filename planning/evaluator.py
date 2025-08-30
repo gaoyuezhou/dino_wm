@@ -127,22 +127,23 @@ class PlanEvaluator:  # evaluator for planning
         )
 
         # plot trajs
+        i_visuals = None
         if self.wm.decoder is not None:
             i_visuals = self.wm.decode_obs(i_z_obses)[0]["visual"]
             i_visuals = self._mask_traj(
                 i_visuals, action_len + 1
             )  # we have action_len + 1 states
-            e_visuals = self.preprocessor.transform_obs_visual(e_visuals)
-            e_visuals = self._mask_traj(e_visuals, action_len * self.frameskip + 1)
-            self._plot_rollout_compare(
-                e_visuals=e_visuals,
-                i_visuals=i_visuals,
-                successes=successes,
-                save_video=save_video,
-                filename=filename,
-            )
+        e_visuals = self.preprocessor.transform_obs_visual(e_visuals)
+        e_visuals = self._mask_traj(e_visuals, action_len * self.frameskip + 1)
+        self._plot_rollout_compare(
+            e_visuals=e_visuals,
+            i_visuals=i_visuals,
+            successes=successes,
+            save_video=save_video,
+            filename=filename,
+        )
 
-        return logs, successes, e_obses, e_states
+        return logs, successes, e_obses, e_states, exec_actions
 
     def _compute_rollout_metrics(self, e_state, e_obs, i_z_obs):
         """
@@ -192,75 +193,122 @@ class PlanEvaluator:  # evaluator for planning
         goal: (b, h, w, c)
         """
         e_visuals = e_visuals[: self.n_plot_samples]
-        i_visuals = i_visuals[: self.n_plot_samples]
         goal_visual = self.obs_g["visual"][: self.n_plot_samples]
         goal_visual = self.preprocessor.transform_obs_visual(goal_visual)
 
-        i_visuals = i_visuals.unsqueeze(2)
-        i_visuals = torch.cat(
-            [i_visuals] + [i_visuals] * (self.frameskip - 1),
-            dim=2,
-        )  # pad i_visuals (due to frameskip)
-        i_visuals = rearrange(i_visuals, "b t n c h w -> b (t n) c h w")
-        i_visuals = i_visuals[:, : i_visuals.shape[1] - (self.frameskip - 1)]
-
         correction = 0.3  # to distinguish env visuals and imagined visuals
 
-        if save_video:
-            for idx in range(e_visuals.shape[0]):
-                success_tag = "success" if successes[idx] else "failure"
-                frames = []
-                for i in range(e_visuals.shape[1]):
-                    e_obs = e_visuals[idx, i, ...]
-                    i_obs = i_visuals[idx, i, ...]
-                    e_obs = torch.cat(
-                        [e_obs.cpu(), goal_visual[idx, 0] - correction], dim=2
+        if i_visuals is not None:
+            i_visuals = i_visuals[: self.n_plot_samples]
+            i_visuals = i_visuals.unsqueeze(2)
+            i_visuals = torch.cat(
+                [i_visuals] + [i_visuals] * (self.frameskip - 1),
+                dim=2,
+            )  # pad i_visuals (due to frameskip)
+            i_visuals = rearrange(i_visuals, "b t n c h w -> b (t n) c h w")
+            i_visuals = i_visuals[:, : i_visuals.shape[1] - (self.frameskip - 1)]
+
+            if save_video:
+                for idx in range(e_visuals.shape[0]):
+                    success_tag = "success" if successes[idx] else "failure"
+                    frames = []
+                    for i in range(e_visuals.shape[1]):
+                        e_obs = e_visuals[idx, i, ...]
+                        i_obs = i_visuals[idx, i, ...]
+                        e_obs = torch.cat(
+                            [e_obs.cpu(), goal_visual[idx, 0] - correction], dim=2
+                        )
+                        i_obs = torch.cat(
+                            [i_obs.cpu(), goal_visual[idx, 0] - correction], dim=2
+                        )
+                        frame = torch.cat([e_obs - correction, i_obs], dim=1)
+                        frame = rearrange(frame, "c w1 w2 -> w1 w2 c")
+                        frame = rearrange(frame, "w1 w2 c -> (w1) w2 c")
+                        frame = frame.detach().cpu().numpy()
+                        frames.append(frame)
+                    video_writer = imageio.get_writer(
+                        f"{filename}_{idx}_{success_tag}.mp4", fps=12
                     )
-                    i_obs = torch.cat(
-                        [i_obs.cpu(), goal_visual[idx, 0] - correction], dim=2
+
+                    for frame in frames:
+                        frame = frame * 2 - 1 if frame.min() >= 0 else frame
+                        video_writer.append_data(
+                            (((np.clip(frame, -1, 1) + 1) / 2) * 255).astype(np.uint8)
+                        )
+                    video_writer.close()
+
+            # pad i_visuals or subsample e_visuals
+            if not self.plot_full:
+                e_visuals = e_visuals[:, :: self.frameskip]
+                i_visuals = i_visuals[:, :: self.frameskip]
+
+            n_columns = e_visuals.shape[1]
+            assert (
+                i_visuals.shape[1] == n_columns
+            ), f"Rollout lengths do not match, {e_visuals.shape[1]} and {i_visuals.shape[1]}"
+
+            # add a goal column
+            e_visuals = torch.cat([e_visuals.cpu(), goal_visual - correction], dim=1)
+            i_visuals = torch.cat([i_visuals.cpu(), goal_visual - correction], dim=1)
+            rollout = torch.cat([e_visuals.cpu() - correction, i_visuals.cpu()], dim=1)
+            n_columns += 1
+
+            imgs_for_plotting = rearrange(rollout, "b h c w1 w2 -> (b h) c w1 w2")
+            imgs_for_plotting = (
+                imgs_for_plotting * 2 - 1
+                if imgs_for_plotting.min() >= 0
+                else imgs_for_plotting
+            )
+            utils.save_image(
+                imgs_for_plotting,
+                f"{filename}.png",
+                nrow=n_columns,  # nrow is the number of columns
+                normalize=True,
+                value_range=(-1, 1),
+            )
+        else:
+            if save_video:
+                for idx in range(e_visuals.shape[0]):
+                    success_tag = "success" if successes[idx] else "failure"
+                    frames = []
+                    for i in range(e_visuals.shape[1]):
+                        e_obs = e_visuals[idx, i, ...]
+                        frame = torch.cat(
+                            [e_obs.cpu(), goal_visual[idx, 0]], dim=2
+                        )
+                        frame = rearrange(frame, "c w1 w2 -> w1 w2 c")
+                        frame = rearrange(frame, "w1 w2 c -> (w1) w2 c")
+                        frame = frame.detach().cpu().numpy()
+                        frames.append(frame)
+                    video_writer = imageio.get_writer(
+                        f"{filename}_{idx}_{success_tag}.mp4", fps=12
                     )
-                    frame = torch.cat([e_obs - correction, i_obs], dim=1)
-                    frame = rearrange(frame, "c w1 w2 -> w1 w2 c")
-                    frame = rearrange(frame, "w1 w2 c -> (w1) w2 c")
-                    frame = frame.detach().cpu().numpy()
-                    frames.append(frame)
-                video_writer = imageio.get_writer(
-                    f"{filename}_{idx}_{success_tag}.mp4", fps=12
-                )
 
-                for frame in frames:
-                    frame = frame * 2 - 1 if frame.min() >= 0 else frame
-                    video_writer.append_data(
-                        (((np.clip(frame, -1, 1) + 1) / 2) * 255).astype(np.uint8)
-                    )
-                video_writer.close()
+                    for frame in frames:
+                        frame = frame * 2 - 1 if frame.min() >= 0 else frame
+                        video_writer.append_data(
+                            (((np.clip(frame, -1, 1) + 1) / 2) * 255).astype(np.uint8)
+                        )
+                    video_writer.close()
 
-        # pad i_visuals or subsample e_visuals
-        if not self.plot_full:
-            e_visuals = e_visuals[:, :: self.frameskip]
-            i_visuals = i_visuals[:, :: self.frameskip]
+            if not self.plot_full:
+                e_visuals = e_visuals[:, :: self.frameskip]
 
-        n_columns = e_visuals.shape[1]
-        assert (
-            i_visuals.shape[1] == n_columns
-        ), f"Rollout lengths do not match, {e_visuals.shape[1]} and {i_visuals.shape[1]}"
+            n_columns = e_visuals.shape[1]
+            e_visuals = torch.cat([e_visuals.cpu(), goal_visual], dim=1)
+            rollout = e_visuals.cpu()
+            n_columns += 1
 
-        # add a goal column
-        e_visuals = torch.cat([e_visuals.cpu(), goal_visual - correction], dim=1)
-        i_visuals = torch.cat([i_visuals.cpu(), goal_visual - correction], dim=1)
-        rollout = torch.cat([e_visuals.cpu() - correction, i_visuals.cpu()], dim=1)
-        n_columns += 1
-
-        imgs_for_plotting = rearrange(rollout, "b h c w1 w2 -> (b h) c w1 w2")
-        imgs_for_plotting = (
-            imgs_for_plotting * 2 - 1
-            if imgs_for_plotting.min() >= 0
-            else imgs_for_plotting
-        )
-        utils.save_image(
-            imgs_for_plotting,
-            f"{filename}.png",
-            nrow=n_columns,  # nrow is the number of columns
-            normalize=True,
-            value_range=(-1, 1),
-        )
+            imgs_for_plotting = rearrange(rollout, "b h c w1 w2 -> (b h) c w1 w2")
+            imgs_for_plotting = (
+                imgs_for_plotting * 2 - 1
+                if imgs_for_plotting.min() >= 0
+                else imgs_for_plotting
+            )
+            utils.save_image(
+                imgs_for_plotting,
+                f"{filename}.png",
+                nrow=n_columns,
+                normalize=True,
+                value_range=(-1, 1),
+            )

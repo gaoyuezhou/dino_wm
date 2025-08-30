@@ -99,7 +99,7 @@ class CEMPlanner(BasePlanner):
             # logging
             self.wandb_run.log({f"{self.logging_prefix}/loss": float(np.mean(losses_for_logging)), "step": it + 1})
             if self.evaluator is not None and (self.eval_every > 0) and (it % self.eval_every == 0):
-                logs, successes, _, _ = self.evaluator.eval_actions(elite_actions, filename=f"{self.logging_prefix}_output_{it+1}")
+                logs, successes, _, _, _ = self.evaluator.eval_actions(elite_actions, filename=f"{self.logging_prefix}_output_{it+1}")
                 logs = {f"{self.logging_prefix}/{k}": v for k, v in logs.items()}
                 logs.update({"step": it + 1})
                 self.wandb_run.log(logs)

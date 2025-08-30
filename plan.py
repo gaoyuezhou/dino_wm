@@ -344,7 +344,7 @@ class PlanWorkspace:
             obs_g=self.obs_g,
             actions=actions_init,
         )
-        logs, successes, _, _ = self.evaluator.eval_actions(
+        logs, successes, _, _, plan_env_actions = self.evaluator.eval_actions(
             actions.detach(), action_len, save_video=True, filename="output_final"
         )
         logs = {f"final_eval/{k}": v for k, v in logs.items()}
@@ -359,6 +359,21 @@ class PlanWorkspace:
         }
         with open(self.log_filename, "a") as file:
             file.write(json.dumps(logs_entry) + "\n")
+
+        dataset_actions = None
+        if self.gt_actions is not None:
+            dataset_actions = self.data_preprocessor.denormalize_actions(
+                rearrange(self.gt_actions, "b t (f d) -> b (t f) d", f=self.frameskip)
+            ).cpu().numpy()
+
+        action_summary = {
+            "dataset_actions": dataset_actions.tolist() if dataset_actions is not None else None,
+            "planned_actions": plan_env_actions.tolist(),
+        }
+        with open("action_summary.json", "w") as f:
+            json.dump(action_summary, f)
+        print("Saved action summary to action_summary.json")
+
         return logs
 
 

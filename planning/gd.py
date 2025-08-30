@@ -109,7 +109,7 @@ class GDPlanner(BasePlanner):
                 {f"{self.logging_prefix}/loss": total_loss.item(), "step": i + 1}
             )
             if self.evaluator is not None and i % self.eval_every == 0:
-                logs, successes, _, _ = self.evaluator.eval_actions(
+                logs, successes, _, _, _ = self.evaluator.eval_actions(
                     actions.detach(), filename=f"{self.logging_prefix}_output_{i+1}"
                 )
                 logs = {f"{self.logging_prefix}/{k}": v for k, v in logs.items()}

@@ -100,7 +100,7 @@ class MPCPlanner(BasePlanner):
                 obs_0=init_obs_0,
                 state_0=init_state_0,
             )
-            logs, successes, e_obses, e_states = self.evaluator.eval_actions(
+            logs, successes, e_obses, e_states, _ = self.evaluator.eval_actions(
                 action_so_far,
                 self.action_len,
                 filename=f"plan{self.iter}",
