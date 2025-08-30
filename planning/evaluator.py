@@ -229,7 +229,7 @@ class PlanEvaluator:  # evaluator for planning
                         frame = frame.detach().cpu().numpy()
                         frames.append(frame)
                     video_writer = imageio.get_writer(
-                        f"{filename}_{idx}_{success_tag}.mp4", fps=12
+                        f"{filename}_{idx}_{success_tag}.mp4"
                     )
 
                     for frame in frames:
@@ -283,7 +283,7 @@ class PlanEvaluator:  # evaluator for planning
                         frame = frame.detach().cpu().numpy()
                         frames.append(frame)
                     video_writer = imageio.get_writer(
-                        f"{filename}_{idx}_{success_tag}.mp4", fps=12
+                        f"{filename}_{idx}_{success_tag}.mp4"
                     )
 
                     for frame in frames:
