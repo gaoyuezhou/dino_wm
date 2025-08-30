@@ -170,6 +170,8 @@ class PlanEvaluator:  # evaluator for planning
 
         e_obs = move_to_device(self.preprocessor.transform_obs(e_obs), self.device)
         e_z_obs = self.wm.encode_obs(e_obs)
+        if "visual" not in e_z_obs and "visual_tokens" in e_z_obs:
+            e_z_obs["visual"] = e_z_obs["visual_tokens"]
         div_visual_emb = torch.norm(e_z_obs["visual"] - i_z_obs["visual"]).item()
         div_proprio_emb = torch.norm(e_z_obs["proprio"] - i_z_obs["proprio"]).item()
 
