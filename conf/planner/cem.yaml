@@ -1,9 +1,34 @@
-_target_: planning.cem.CEMPlanner
-horizon: 5
-topk: 30
-num_samples: 300
-opt_steps: 30
+_target_: planning.cem.TrajectoryCEMPlanner
+
+# core
+horizon: 6
+num_samples: 512        # population size
+topk: 32                # ~6–10% of N works well
+opt_steps: 8
 eval_every: 1
 discrete_actions: [0, 1, 2, 4, 5]
 
+# trajectory-CEM knobs (good defaults for H=5)
+parent_temp: 0.5
+crossover_prob: 0.9
+two_point_crossover: true
+
+# mutation (annealed)
+mut_rate_start: 0.2     # ≈ 1 / H
+mut_rate_end: 0.04      # ≈ 0.2 / H
+
+# block/segment mutation
+seg_mut_prob: 0.25
+seg_len_min: 2
+seg_len_max: 5          # min(6, H)
+
+# diversity & stability
+enforce_unique: true
+restart_patience: 3
+restart_frac: 0.5
+
+# logging
+logging_prefix: plan_traj
+
 name: cem
+
