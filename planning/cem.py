@@ -6,7 +6,7 @@ from .base_planner import BasePlanner
 from utils import move_to_device
 
 
-class CEMPlanner(BasePlanner):
+class CEMPlannerDiscrete(BasePlanner):
     def __init__(self, horizon, topk, num_samples, opt_steps, eval_every,
                  wm, action_dim, objective_fn, preprocessor, evaluator, wandb_run,
                  discrete_actions, logging_prefix="plan_0", log_filename="logs.json",
