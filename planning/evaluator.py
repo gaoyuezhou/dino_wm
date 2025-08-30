@@ -117,7 +117,7 @@ class PlanEvaluator:  # evaluator for planning
         e_visuals = e_obses["visual"]
         e_final_obs = self._get_trajdict_last(e_obses, action_len * self.frameskip + 1)
         e_final_state = e_states[:, :, -1, :]   # (B, 2, d)
-        print("[CHK e_final_state]", np.asarray(e_final_state).shape)  # exp
+       #print("[CHK e_final_state]", np.asarray(e_final_state).shape)  # exp
 
         # compute eval metrics
         logs, successes = self._compute_rollout_metrics(
