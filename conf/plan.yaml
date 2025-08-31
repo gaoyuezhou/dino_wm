@@ -30,7 +30,7 @@ model_epoch: latest
 seed: 99
 n_evals: 1
 goal_source: 'dset' # 'random_state' or 'dset' or 'random_action' 
-goal_H: 5 # specifies how far away the goal is if goal_source is 'dset'
+goal_H: 6 # specifies how far away the goal is if goal_source is 'dset'
 n_plot_samples: 10
 
 debug_dset_init: False

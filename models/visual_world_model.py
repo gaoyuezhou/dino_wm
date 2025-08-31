@@ -23,6 +23,11 @@ class VWorldModel(nn.Module):
         train_encoder=True,
         train_predictor=False,
         train_decoder=True,
+        lambda_l2=0.0,
+        var_target=1.0,
+        lambda_var=0.0,
+        action_dropout_p=0.0,
+        action_noise_sigma=0.0,
     ):
         super().__init__()
         self.num_hist = num_hist
@@ -67,6 +72,11 @@ class VWorldModel(nn.Module):
         self.decoder_criterion = nn.MSELoss()
         self.decoder_latent_loss_weight = 0.25
         self.emb_criterion = nn.MSELoss()
+        self.lambda_l2 = lambda_l2
+        self.var_target = var_target
+        self.lambda_var = lambda_var
+        self.action_noise_sigma = action_noise_sigma
+        self.action_dropout = nn.Dropout(p=action_dropout_p) if action_dropout_p > 0 else nn.Identity()
 
     def train(self, mode=True):
         super().train(mode)
@@ -101,7 +111,7 @@ class VWorldModel(nn.Module):
         #print(f"z_dct: {z_dct} and shapes {[v.shape for v in z_dct.values()]}")
 
         # Get action embedding; for inverse projector we pass observations only
-        act_emb = self.encode_act(act, z_dct["visual_frame"])
+        act_emb, aux_act = self.encode_act(act, z_dct["visual_frame"])
         #   non-inverse (e.g., MLP on actions) -> (B,T,Za)
 
         visual = z_dct["visual_tokens"]  # (B,T,F,Cv)
@@ -143,7 +153,7 @@ class VWorldModel(nn.Module):
         else:
             raise ValueError(f"Unknown concat_dim: {self.concat_dim}")
 
-        return z
+        return z, aux_act
     
     def encode_act(self, act, obs_emb=None):
         """
@@ -160,7 +170,11 @@ class VWorldModel(nn.Module):
             # Shift left by 1 along T, pad last with final available action
             if a.size(1) > 1:
                 a = torch.cat([a[:, 1:, :, :], a[:, -1:, :, :]], dim=1)  # (B,T,1,Za)
-            return a
+            a_raw = a
+            a = self.action_dropout(a)
+            if self.action_noise_sigma > 0 and self.training:
+                a = a + torch.randn_like(a) * self.action_noise_sigma
+            return a, {"a": a, "a_raw": a_raw}
 
         # Proprio (or other direct) path: encoder likely returns (B,T,Za)
         a = self.action_encoder(act)                  # (B,T,Za) or (B,T,1,Za)
@@ -170,7 +184,7 @@ class VWorldModel(nn.Module):
             pass
         else:
             raise ValueError(f"direct action head must return (B,T,Za) or (B,T,1,Za), got {tuple(a.shape)}")
-        return a
+        return a, {"a": a, "a_raw": a}
     
     def encode_proprio(self, proprio):
         proprio = self.proprio_encoder(proprio)
@@ -277,7 +291,18 @@ class VWorldModel(nn.Module):
         """
         loss = 0
         loss_components = {}
-        z = self.encode(obs, act)
+        z, aux_act = self.encode(obs, act)
+        a = aux_act.get("a_raw") if isinstance(aux_act, dict) else None
+        if a is not None:
+            l2_pen = self.lambda_l2 * (a ** 2).mean()
+            loss = loss + l2_pen
+            loss_components["action_l2"] = l2_pen
+
+            flat = a.view(-1, a.shape[-1])
+            var = flat.var(dim=0, unbiased=False)
+            var_pen = self.lambda_var * ((var - self.var_target) ** 2).mean()
+            loss = loss + var_pen
+            loss_components["action_variance"] = var_pen
         z_src = z[:, : self.num_hist, :, :]  # (b, num_hist, num_patches, dim)
         z_tgt = z[:, self.num_pred :, :, :]  # (b, num_hist, num_patches, dim)
         visual_src = obs['visual'][:, : self.num_hist, ...]  # (b, num_hist, 3, img_size, img_size)
@@ -352,11 +377,18 @@ class VWorldModel(nn.Module):
         return z_pred, visual_pred, visual_reconstructed, loss, loss_components
 
     def replace_actions_from_z(self, z, act):
-        act_emb = self.encode_act(act)
+        act_emb, _ = self.encode_act(act)
         if self.concat_dim == 0:
             z[:, :, -1, :] = act_emb
         elif self.concat_dim == 1:
-            act_tiled = repeat(act_emb.unsqueeze(2), "b t 1 a -> b t f a", f=z.shape[2])
+            # act_emb is expected to be (B,T,1,Za). Tile across tokens without
+            # introducing an extra singleton dimension.
+            if act_emb.dim() == 4:
+                act_tiled = repeat(act_emb, "b t 1 a -> b t f a", f=z.shape[2])
+            elif act_emb.dim() == 3:
+                act_tiled = repeat(act_emb.unsqueeze(2), "b t 1 a -> b t f a", f=z.shape[2])
+            else:
+                raise ValueError(f"Unexpected act_emb shape {act_emb.shape}")
             act_repeated = act_tiled.repeat(1, 1, 1, self.num_action_repeat)
             z[..., -self.action_dim:] = act_repeated
         return z
@@ -387,13 +419,13 @@ class VWorldModel(nn.Module):
 
             # For embedded actions we DO NOT re-encode actions in the context.
             # If your action encoder is inverse, encode_act(obs_emb) will compute context actions internally.
-            z = self.encode(obs_0, act=None)           # (B, n, F, C)
+            z, _ = self.encode(obs_0, act=None)          # (B, n, F, C)
 
         else:
             # Raw actions (B, n+t, A) — original path
             act_0  = act[:, :num_obs_init]             # (B, n, A)
             action = act[:, num_obs_init:]             # (B, t, A)
-            z = self.encode(obs_0, act_0)              # (B, n, F, C)
+            z, _ = self.encode(obs_0, act_0)             # (B, n, F, C)
 
         # Autoregressive rollout
         t = 0

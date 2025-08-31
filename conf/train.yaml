@@ -46,10 +46,15 @@ frameskip: 1
 concat_dim: 1
 
 normalize_action: True
+lambda_l2: 0.0001
+var_target: 1.0
+lambda_var: 0.01
 
 # action encoder
 action_emb_dim: 10
 num_action_repeat: 1
+action_dropout_p: 0.1
+action_noise_sigma: 0.05
 
 # proprio encoder
 proprio_emb_dim: 1 
@@ -68,6 +73,11 @@ model:
   train_encoder: False
   train_predictor: True
   train_decoder: False
+  lambda_l2: ${lambda_l2}
+  var_target: ${var_target}
+  lambda_var: ${lambda_var}
+  action_dropout_p: ${action_dropout_p}
+  action_noise_sigma: ${action_noise_sigma}
 
 debug: False 
 

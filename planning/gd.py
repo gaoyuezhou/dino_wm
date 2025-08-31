@@ -82,6 +82,8 @@ class GDPlanner(BasePlanner):
             self.preprocessor.transform_obs(obs_g), self.device
         )
         z_obs_g = self.wm.encode_obs(trans_obs_g)
+        if "visual" not in z_obs_g and "visual_tokens" in z_obs_g:
+            z_obs_g["visual"] = z_obs_g["visual_tokens"]
         z_obs_g_detached = {key: value.detach() for key, value in z_obs_g.items()}
 
         actions = self.init_actions(obs_0, actions).to(self.device)
@@ -109,7 +111,7 @@ class GDPlanner(BasePlanner):
                 {f"{self.logging_prefix}/loss": total_loss.item(), "step": i + 1}
             )
             if self.evaluator is not None and i % self.eval_every == 0:
-                logs, successes, _, _ = self.evaluator.eval_actions(
+                logs, successes, _, _, _ = self.evaluator.eval_actions(
                     actions.detach(), filename=f"{self.logging_prefix}_output_{i+1}"
                 )
                 logs = {f"{self.logging_prefix}/{k}": v for k, v in logs.items()}

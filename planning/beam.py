@@ -50,6 +50,8 @@ class BeamPlanner(BasePlanner):
       trans_obs_0 = move_to_device(self.preprocessor.transform_obs(obs_0), self.device)
       trans_obs_g = move_to_device(self.preprocessor.transform_obs(obs_g), self.device)
       z_obs_g = self.wm.encode_obs(trans_obs_g)
+      if "visual" not in z_obs_g and "visual_tokens" in z_obs_g:
+          z_obs_g["visual"] = z_obs_g["visual_tokens"]
 
       n_evals = trans_obs_0["visual"].shape[0]
       elite_actions = torch.zeros(n_evals, self.horizon, self.action_dim, device=self.device)
@@ -161,7 +163,7 @@ class BeamPlanner(BasePlanner):
       self.wandb_run.log({f"{self.logging_prefix}/loss": float(np.mean(losses_log)), "step": 1})
 
       if self.evaluator is not None:
-          logs, successes, _, _ = self.evaluator.eval_actions(
+          logs, successes, _, _, _ = self.evaluator.eval_actions(
               elite_actions, filename=f"{self.logging_prefix}_output"
           )
           logs = {f"{self.logging_prefix}/{k}": v for k, v in logs.items()}

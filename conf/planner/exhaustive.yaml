@@ -1,0 +1,22 @@
+_target_: planning.exhaustive.ExhaustivePlanner
+
+# core (same keys as CEM)
+horizon: 6
+num_samples: 0          # accepted but unused
+topk: 1                 # accepted but unused
+opt_steps: 1            # single pass (recommended)
+eval_every: 1
+discrete_actions: [0, 1, 2, 4, 5]
+
+# optional (exhaustive-specific, safe defaults)
+chunk_size: 2048        # reduce if RAM is tight; increase for throughput
+use_autocast: false     # set true if WM supports AMP on CUDA
+
+# kept for API compatibility (ignored by exhaustive)
+alpha: 0.5
+p_min: 0.02
+temp_start: 1.0
+temp_end: 0.5
+
+logging_prefix: plan_exhaustive
+name: cem

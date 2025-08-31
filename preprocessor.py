@@ -77,8 +77,8 @@ class Preprocessor:
             B, T, C, H, W = v.shape
             v = v.reshape(B * T, C, H, W)
             v = self.transform(v) if self.transform else v
-            return v.reshape(B, T, C, H, W)
-
+            C_new, H_new, W_new = v.shape[1:]
+            return v.reshape(B, T, C_new, H_new, W_new)
         if v.ndim == 4:
             if v.shape[-1] in (1, 3, 4) and v.shape[1] not in (1, 3, 4):
                 v = rearrange(v, "b h w c -> b c h w").to(torch.float32) / 255.0
