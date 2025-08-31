@@ -12,7 +12,7 @@ from utils import (
     concat_trajdict,
 )
 from torchvision import utils
-
+from models.inverse_dynamics import InverseDynamicsProjector
 
 class PlanEvaluator:  # evaluator for planning
     def __init__(
@@ -104,9 +104,23 @@ class PlanEvaluator:  # evaluator for planning
             self.preprocessor.transform_obs(self.obs_g), self.device
         )
         with torch.no_grad():
+            wm_actions = actions
+            if isinstance(self.wm.action_encoder, InverseDynamicsProjector):
+                if wm_actions.dim() == 3:
+                    wm_actions = wm_actions.unsqueeze(2)
+                elif wm_actions.dim() == 4 and wm_actions.shape[2] == 1:
+                    pass
+                else:
+                    raise ValueError(
+                        "Planner actions must have shape (B,T,D) or (B,T,1,D)"
+                    )
+                if wm_actions.shape[-1] != self.wm.action_encoder.output_dim:
+                    raise ValueError(
+                        f"Planner action dim {wm_actions.shape[-1]} does not match latent dim {self.wm.action_encoder.output_dim}"
+                    )
             i_z_obses, _ = self.wm.rollout(
                 obs_0=trans_obs_0,
-                act=actions,
+                act=wm_actions,
             )
         i_final_z_obs = self._get_trajdict_last(i_z_obses, action_len + 1)
 
