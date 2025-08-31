@@ -26,6 +26,8 @@ hydra:
 ckpt_base_path: /content/drive/MyDrive/Model_checkpoints/2025-08-22/13-16-21 #put absolute path here. Checkpoints will be loaded from ${ckpt_base_path}
 model_name: dino
 model_epoch: latest
+classifier_ckpt: null  # optional path to action classifier checkpoint
+goal_file_path: null   #
 
 seed: 99
 n_evals: 1

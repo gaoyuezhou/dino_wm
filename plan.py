@@ -8,6 +8,7 @@ import torch
 import pickle
 import wandb
 import logging
+import torch.nn as nn
 import warnings
 import numpy as np
 import submitit
@@ -21,6 +22,7 @@ from env.venv import SubprocVectorEnv
 from custom_resolvers import replace_slash
 from preprocessor import Preprocessor
 from planning.evaluator import PlanEvaluator
+from models.inverse_dynamics import InverseDynamicsProjector
 from utils import cfg_to_dict, seed
 import pyglet
 pyglet.options["headless"] = True
@@ -141,6 +143,24 @@ class PlanWorkspace:
         self.goal_H = cfg_dict["goal_H"]
         self.action_dim = self.dset.action_dim * self.frameskip
         self.debug_dset_init = cfg_dict["debug_dset_init"]
+        use_inverse = isinstance(wm.action_encoder, InverseDynamicsProjector)
+        self.action_classifier = None
+        if use_inverse and "classifier_ckpt" in cfg_dict:
+            self.action_classifier = nn.Sequential(
+                nn.Linear(10, 128),
+                nn.ReLU(),
+                nn.Linear(128, dset.action_dim),
+            )
+            state = torch.load(cfg_dict["classifier_ckpt"], map_location=self.device)
+            if "classifier_state" in state:
+                state = state["classifier_state"]
+            self.action_classifier.load_state_dict(state)
+            self.action_classifier.to(self.device)
+            self.action_classifier.eval()
+
+        objective_fn = hydra.utils.call(
+            cfg_dict["objective"],
+        )
 
         objective_fn = hydra.utils.call(
             cfg_dict["objective"],
@@ -172,6 +192,7 @@ class PlanWorkspace:
             seed=self.eval_seed,
             preprocessor=self.data_preprocessor,
             n_plot_samples=self.cfg_dict["n_plot_samples"],
+            classifier=self.action_classifier,
         )
 
         if self.wandb_run is None or isinstance(
