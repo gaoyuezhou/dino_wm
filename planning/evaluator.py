@@ -126,12 +126,26 @@ class PlanEvaluator:  # evaluator for planning
 
         # rollout in env
         if self.classifier is not None:
-            logits = self.classifier(actions)
+            classifier_actions = (
+                actions.squeeze(2)
+                if actions.dim() == 4 and actions.shape[2] == 1
+                else actions
+            )
+            logits = self.classifier(classifier_actions)
             discrete = logits.argmax(dim=-1).float()
             actions_for_env = discrete.unsqueeze(-1)
         else:
-            actions_for_env = actions
+            actions_for_env = (
+                actions.squeeze(2)
+                if actions.dim() == 4 and actions.shape[2] == 1
+                else actions
+            )
 
+        actions_for_env = (
+            actions_for_env.squeeze(2)
+            if actions_for_env.dim() == 4 and actions_for_env.shape[2] == 1
+            else actions_for_env
+        )
         if self.classifier is not None:
             exec_actions = repeat(
                 actions_for_env.cpu(), "b t d -> b (t f) d", f=self.frameskip
