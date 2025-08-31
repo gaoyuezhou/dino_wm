@@ -141,13 +141,17 @@ class PlanWorkspace:
         self.n_evals = cfg_dict["n_evals"]
         self.goal_source = cfg_dict["goal_source"]
         self.goal_H = cfg_dict["goal_H"]
-        self.action_dim = self.dset.action_dim * self.frameskip
-        self.debug_dset_init = cfg_dict["debug_dset_init"]
+        #self.action_dim = self.dset.action_dim * self.frameskip
         use_inverse = isinstance(wm.action_encoder, InverseDynamicsProjector)
+        if use_inverse:
+            self.action_dim = wm.action_encoder.output_dim
+        else:
+            self.action_dim = self.dset.action_dim * self.frameskip
+        self.debug_dset_init = cfg_dict["debug_dset_init"]
         self.action_classifier = None
         if use_inverse and "classifier_ckpt" in cfg_dict:
             self.action_classifier = nn.Sequential(
-                nn.Linear(10, 128),
+                nn.Linear(self.action_dim, 128),
                 nn.ReLU(),
                 nn.Linear(128, dset.action_dim),
             )
