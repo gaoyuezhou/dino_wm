@@ -6,12 +6,12 @@ dataset:
   _target_: "datasets.rearrange_dset.load_rearrange_slice_train_val"
   n_rollout: null
   normalize_action: ${normalize_action}
-  data_path: /content/rearrange_200_v1
+  data_path: /content/rearrange_2000
   split_ratio: 0.9
   filter_train: true
   filter_val: true
-  n_slices_train: 200
-  n_slices_val: 20
+  n_slices_train: 22200
+  n_slices_val: 2800
   filter_actions: [4, 5]
   seed_train: 42
   seed_val: 99
