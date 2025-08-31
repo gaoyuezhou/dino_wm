@@ -31,7 +31,7 @@ hydra:
 
 training:
   seed: 0
-  epochs: 60
+  epochs: 40
   batch_size: 16 # should >= nodes * tasks_per_node
   save_every_x_epoch: 1
   reconstruct_every_x_batch: 500
@@ -46,15 +46,15 @@ frameskip: 1
 concat_dim: 1
 
 normalize_action: True
-lambda_l2: 0.0001
+lambda_l2: 0.0
 var_target: 1.0
-lambda_var: 0.01
+lambda_var: 0.0
 
 # action encoder
 action_emb_dim: 10
 num_action_repeat: 1
-action_dropout_p: 0.1
-action_noise_sigma: 0.05
+action_dropout_p: 0.0
+action_noise_sigma: 0.00
 
 # proprio encoder
 proprio_emb_dim: 1 
