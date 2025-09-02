@@ -204,7 +204,7 @@ def select_condition_then_sample_rest(dataset, n_slices, target_actions={4, 5}, 
 def load_rearrange_slice_train_val(
     transform,
     n_rollout: int = 200,
-    data_path: str = str(Path(os.getenv("DATASET_DIR"), "rearrange_1k")),
+    data_path: str = str(Path(os.getenv("DATASET_DIR"))),
     normalize_action: bool = False,
     split_ratio: float = 0.9,
     num_hist: int = 3,
