@@ -153,7 +153,7 @@ class PlanWorkspace:
             self.action_classifier = nn.Sequential(
                 nn.Linear(self.action_dim, 128),
                 nn.ReLU(),
-                nn.Linear(128, dset.action_dim),
+                nn.Linear(128, 6),
             )
             state = torch.load(cfg_dict["classifier_ckpt"], map_location=self.device)
             if "classifier_state" in state:

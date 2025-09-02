@@ -1,11 +1,12 @@
-_target_: planning.cem.TrajectoryCEMPlanner
+_target_: planning.cem.CEMPlanner
 
 # core
 horizon: 6
-num_samples: 512        # population size
-topk: 32                # ~6–10% of N works well
+num_samples: 200        # population size
+topk: 19                # ~6–10% of N works well
 opt_steps: 8
 eval_every: 1
+var_scale: 0.5
 discrete_actions: [0, 1, 2, 4, 5]
 
 # trajectory-CEM knobs (good defaults for H=5)

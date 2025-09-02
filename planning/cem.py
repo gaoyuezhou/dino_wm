@@ -5,6 +5,8 @@ import torch.nn.functional as F
 from .base_planner import BasePlanner
 from utils import move_to_device
 from models.inverse_dynamics import InverseDynamicsProjector
+
+
 class CEMPlanner(BasePlanner):
     def __init__(
         self,
@@ -110,11 +112,10 @@ class CEMPlanner(BasePlanner):
                         if isinstance(self.wm.action_encoder, InverseDynamicsProjector)
                         else action
                     )
-                    i_z_obses, i_zs = self.wm.rollout(
+                    i_z_obses, _ = self.wm.rollout(
                         obs_0=cur_trans_obs_0,
-                        act=action,
+                        act=wm_action,
                     )
-
                 loss = self.objective_fn(i_z_obses, cur_z_obs_g)
                 topk_idx = torch.argsort(loss)[: self.topk]
                 topk_action = action[topk_idx]
