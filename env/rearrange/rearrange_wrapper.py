@@ -167,6 +167,7 @@ class RearrangeOneRoomWrapper(RearrangeOneRoom):
 
     def rollout(self, _seed_unused, _init_state_unused, actions):
         states_list = []
+        print(f"actions in env.rollout: {actions}")
 
         first, _ = self.reset(seed=self.seed)
         self._resolve_target_index()

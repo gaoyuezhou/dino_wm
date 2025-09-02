@@ -96,6 +96,7 @@ class PlanEvaluator:  # evaluator for planning
         n_evals = actions.shape[0]
         if action_len is None:
             action_len = np.full(n_evals, np.inf)
+
         # rollout in wm
         trans_obs_0 = move_to_device(
             self.preprocessor.transform_obs(self.obs_0), self.device
@@ -125,6 +126,7 @@ class PlanEvaluator:  # evaluator for planning
         i_final_z_obs = self._get_trajdict_last(i_z_obses, action_len + 1)
 
         # rollout in env
+        print(f"Eval actions first batch: {wm_actions[0]}")
         if self.classifier is not None:
             classifier_actions = (
                 actions.squeeze(2)
@@ -155,7 +157,7 @@ class PlanEvaluator:  # evaluator for planning
                 actions_for_env.cpu(), "b t (f d) -> b (t f) d", f=self.frameskip
             )
             exec_actions = self.preprocessor.denormalize_actions(exec_actions).numpy()
-        
+        print(f"Exec actions first batch: {exec_actions[0]}")
         e_obses, e_states = self.env.rollout(self.seed, self.state_0, exec_actions)
         e_visuals = e_obses["visual"]
         e_final_obs = self._get_trajdict_last(e_obses, action_len * self.frameskip + 1)

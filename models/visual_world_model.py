@@ -406,20 +406,50 @@ class VWorldModel(nn.Module):
         z_obses: (B, n+t+1, F, C)   # observation embeddings for each step
         z:       (B, n+t+1, F, C)   # full latent sequence after injection
         """
-        B = obs_0["visual"].shape[0]
-        num_obs_init = obs_0['visual'].shape[1]
+        B = obs_0["visual"].shape[0] # num_samples 
+        num_obs_init = obs_0['visual'].shape[1] # 1
 
         # Detect whether 'act' is pre-embedded (4D) or raw (3D)
-        is_embedded = (act is not None) and (act.dim() == 4)
+        is_embedded = (act is not None) and (act.dim() == 4) # true for wm.rollout calls 
 
         if is_embedded:
-            # Pre-embedded actions (B, n+t, 1, D)
-            act_0_emb = act[:, :num_obs_init]          # (B, n, 1, D)
-            action_emb = act[:, num_obs_init:]         # (B, t, 1, D)
+            # act: (B, num_obs_init + T_future, 1, D_act)
+            act_0_emb  = act[:, :num_obs_init]     # (B, num_obs_init, 1, D_act)  context
+            action_emb = act[:, num_obs_init:]     # (B, T_future,    1, D_act)   future
 
-            # For embedded actions we DO NOT re-encode actions in the context.
-            # If your action encoder is inverse, encode_act(obs_emb) will compute context actions internally.
-            z, _ = self.encode(obs_0, act=None)          # (B, n, F, C)
+            # --- encode observations ONLY (avoid inverse/double-encoding of actions) ---
+            z_dct   = self.encode_obs(obs_0)
+            visual  = z_dct["visual_tokens"]       # (B, num_obs_init, F, C_v)
+            proprio = z_dct["proprio"]             # (B, num_obs_init, C_p)
+            B, T0, F, _ = visual.shape
+            device, dtype = visual.device, visual.dtype
+
+            # --- build initial z and inject act_0_emb like your existing concat logic ---
+            if self.concat_dim == 0:
+                # token-level: [visual_tokens] + [proprio_tok] + [action_tok]
+                proprio_tok = proprio.unsqueeze(2)                     # (B,T0,1,C_p)
+                act0_tok = act_0_emb if act_0_emb.dim() == 4 else act_0_emb.unsqueeze(2)  # -> (B,T0,1,D_act)
+                z = torch.cat(
+                    [visual, proprio_tok, act0_tok.to(device=device, dtype=dtype)],
+                    dim=2
+                )                                                      # (B,T0,F+2, *)
+
+            elif self.concat_dim == 1:
+                # channel-level: tile proprio & action across tokens, concat in channels
+                proprio_tiled = proprio.unsqueeze(2).expand(-1, -1, F, -1)              # (B,T0,F,C_p)
+                prop_rep = proprio_tiled.repeat(1, 1, 1, getattr(self, "num_proprio_repeat", 1))
+
+                rep_a = getattr(self, "num_action_repeat", 1)
+                act0_tiled = act_0_emb.expand(-1, -1, F, -1)                            # (B,T0,F, D_act)
+                act0_rep   = act0_tiled.repeat(1, 1, 1, rep_a)                          # (B,T0,F, D_act*rep_a)
+
+                # allocate tail channels and write action there
+                tail = torch.zeros(B, T0, F, act0_rep.shape[-1], device=device, dtype=dtype)
+                z = torch.cat([visual, prop_rep, tail], dim=3)                          # (B,T0,F, C_v + C_p*rep_p + D_act*rep_a)
+                z[..., -act0_rep.shape[-1]:] = act0_rep
+            else:
+                raise ValueError(f"Unknown concat_dim: {self.concat_dim}")
+
 
         else:
             # Raw actions (B, n+t, A) — original path
@@ -431,9 +461,9 @@ class VWorldModel(nn.Module):
         t = 0
         inc = 1
         if is_embedded:
-            T_future = action_emb.shape[1]
+            T_future = action_emb.shape[1] # 5
             while t < T_future:
-                z_pred = self.predict(z[:, -self.num_hist :])   # (B, h, F, C)
+                z_pred = self.predict(z[:, -self.num_hist :])   # (B, h, F, C).  
                 z_new  = z_pred[:, -inc:, ...]                  # (B, 1, F, C)
 
                 # Inject pre-embedded action (skip encode_act to avoid double-encoding)

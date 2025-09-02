@@ -276,6 +276,7 @@ class PlanWorkspace:
             wm_actions = rearrange(actions, "b (t f) d -> b t (f d)", f=self.frameskip)
             exec_actions = self.data_preprocessor.denormalize_actions(actions)
             # replay actions in env to get gt obses
+            print(f"Dataset Actions: {exec_actions}")
             rollout_obses, rollout_states = self.env.rollout( 
                 self.eval_seed, init_state, exec_actions.numpy()
             )
@@ -283,6 +284,8 @@ class PlanWorkspace:
                 key: np.expand_dims(arr[:, 0], axis=1)
                 for key, arr in rollout_obses.items()
             }
+            print(f"Shape of obs_0: {[arr.shape for arr in self.obs_0.values()]}")
+            print(f"Shape of obs_g: {[arr.shape for arr in self.obs_g.values()]}")
             self.obs_g = {
                 key: np.expand_dims(arr[:, -1], axis=1)
                 for key, arr in rollout_obses.items()

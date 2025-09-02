@@ -23,7 +23,7 @@ hydra:
             "export MASTER_PORT=$(for port in $(shuf -i 30000-65500 -n 20); do if [[ $(netstat -tupln 2>&1 | grep $port | wc -l) -eq 0 ]] ; then echo $port; break; fi; done;)",]
 
 # model to load for planning
-ckpt_base_path: /content/drive/MyDrive/Model_checkpoints/2025-08-22/13-16-21 #put absolute path here. Checkpoints will be loaded from ${ckpt_base_path}
+ckpt_base_path: /content/drive/MyDrive/Model_checkpoints/2025-08-31/17-26-19 #put absolute path here. Checkpoints will be loaded from ${ckpt_base_path}
 model_name: dino
 model_epoch: latest
 classifier_ckpt: /content/drive/MyDrive/Model_checkpoints/classifier_ckpts/classifier_epoch_2.pth  # optional path to action classifier checkpoint
