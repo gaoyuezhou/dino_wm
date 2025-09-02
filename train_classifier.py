@@ -13,7 +13,7 @@ from models.visual_world_model import VWorldModel
 
 
 def build_world_model(ckpt_path: str, img_size: int, num_hist: int, num_pred: int):
-    
+
     ckpt_path = Path(ckpt_path)
     ckpt = torch.load(ckpt_path, map_location="cpu")
     cfg = None
@@ -83,7 +83,7 @@ def prepare_dataloaders(batch_size: int, data_path: str, n_rollout=None, num_wor
         shuffle=False,
         num_workers=num_workers,
     )
-    num_actions = int(datasets["train"].get_all_actions().max().item() + 1)
+    num_actions = 6 #int(datasets["train"].get_all_actions().max().item() + 1)
     return train_loader, val_loader, num_actions
 
 
@@ -173,5 +173,5 @@ if __name__ == "__main__":
     parser.add_argument("--img_size", type=int, default=224)
     parser.add_argument("--num_hist", type=int, default=3)
     parser.add_argument("--num_pred", type=int, default=1)
-    parser.add_argument("--save_dir", type=str, default="classifier_ckpts")
+    parser.add_argument("--save_dir", type=str, default="/content/drive/MyDrive/Model_checkpoints/classifier_ckpts")
     train_classifier(parser.parse_args())
