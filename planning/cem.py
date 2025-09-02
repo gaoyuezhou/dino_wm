@@ -127,7 +127,7 @@ class CEMPlanner(BasePlanner):
                 {f"{self.logging_prefix}/loss": np.mean(losses), "step": i + 1}
             )
             if self.evaluator is not None and i % self.eval_every == 0:
-                logs, successes, _, _ = self.evaluator.eval_actions(
+                logs, successes, e_obses, e_states, exec_actions = self.evaluator.eval_actions(
                     mu, filename=f"{self.logging_prefix}_output_{i+1}"
                 )
                 logs = {f"{self.logging_prefix}/{k}": v for k, v in logs.items()}

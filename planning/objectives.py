@@ -22,7 +22,7 @@ def create_objective_fn(alpha, base, mode="last"):
         Returns:
             loss: tensor (B, )
         """
-        loss_visual = metric(z_obs_pred["visual"][:, -1:], z_obs_tgt["visual"]).mean(
+        loss_visual = metric(z_obs_pred["visual"][:, -1:], z_obs_tgt["visual_tokens"]).mean(
             dim=tuple(range(1, z_obs_pred["visual"].ndim))
         )
         loss_proprio = metric(z_obs_pred["proprio"][:, -1:], z_obs_tgt["proprio"]).mean(
