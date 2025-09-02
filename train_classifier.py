@@ -80,7 +80,7 @@ def prepare_dataloaders(batch_size: int, data_path: str, n_rollout=None, num_wor
     val_loader = DataLoader(
         datasets["valid"],
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=True,
         num_workers=num_workers,
     )
     num_actions = 6 #int(datasets["train"].get_all_actions().max().item() + 1)
@@ -147,7 +147,7 @@ def train_classifier(args):
         acc = correct / total if total > 0 else 0.0
         print(f"Validation accuracy: {acc:.4f}")
 
-        if epoch % 2 == 0:
+        if (epoch+1) % 1 == 0:
             save_dir = Path(args.save_dir)
             save_dir.mkdir(parents=True, exist_ok=True)
             torch.save(
