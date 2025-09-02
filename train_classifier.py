@@ -169,7 +169,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--n_rollout", type=int, default=None)
-    parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--num_workers", type=int, default=12)
     parser.add_argument("--img_size", type=int, default=224)
     parser.add_argument("--num_hist", type=int, default=3)
     parser.add_argument("--num_pred", type=int, default=1)
