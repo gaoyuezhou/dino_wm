@@ -4,7 +4,7 @@ from einops import rearrange, repeat
 import torch.nn.functional as F
 from .base_planner import BasePlanner
 from utils import move_to_device
-
+from models.inverse_dynamics import InverseDynamicsProjector
 class CEMPlanner(BasePlanner):
     def __init__(
         self,
@@ -105,6 +105,11 @@ class CEMPlanner(BasePlanner):
                 )
                 action[0] = mu[traj]  # optional: make the first one mu itself
                 with torch.no_grad():
+                    wm_action = (
+                        action.unsqueeze(2)
+                        if isinstance(self.wm.action_encoder, InverseDynamicsProjector)
+                        else action
+                    )
                     i_z_obses, i_zs = self.wm.rollout(
                         obs_0=cur_trans_obs_0,
                         act=action,

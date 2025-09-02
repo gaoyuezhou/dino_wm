@@ -291,10 +291,10 @@ class PlanWorkspace:
             self.state_0 = rs[:, :, 0, :]   # (B, 2, d)
             self.state_g = rs[:, :, -1, :]  # (B, 2, d)
 
-            print(f"self.state_g:{self.state_g}")
+            # print(f"self.state_g:{self.state_g}")
 
-            print("[CHK] state_0", np.asarray(self.state_0).shape, 
-                  "state_g", np.asarray(self.state_g).shape)
+            # print("[CHK] state_0", np.asarray(self.state_0).shape, 
+            #       "state_g", np.asarray(self.state_g).shape)
             self.gt_actions = wm_actions
 
     def sample_traj_segment_from_dset(self, traj_len):
