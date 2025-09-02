@@ -154,7 +154,8 @@ class PlanEvaluator:  # evaluator for planning
             exec_actions = rearrange(
                 actions_for_env.cpu(), "b t (f d) -> b (t f) d", f=self.frameskip
             )
-        exec_actions = self.preprocessor.denormalize_actions(exec_actions).numpy()
+            exec_actions = self.preprocessor.denormalize_actions(exec_actions).numpy()
+        
         e_obses, e_states = self.env.rollout(self.seed, self.state_0, exec_actions)
         e_visuals = e_obses["visual"]
         e_final_obs = self._get_trajdict_last(e_obses, action_len * self.frameskip + 1)
