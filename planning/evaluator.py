@@ -218,7 +218,7 @@ class PlanEvaluator:  # evaluator for planning
         e_z_obs = self.wm.encode_obs(e_obs)
         if "visual" not in e_z_obs and "visual_tokens" in e_z_obs:
             e_z_obs["visual"] = e_z_obs["visual_tokens"]
-        div_visual_emb = torch.norm(e_z_obs["visual"] - i_z_obs["visual"]).item()
+        div_visual_emb = ((e_z_obs["visual"] - i_z_obs["visual"]) ** 2).mean().item()  # element-wise MSE, like training #torch.norm(e_z_obs["visual"] - i_z_obs["visual"]).item()
         div_proprio_emb = torch.norm(e_z_obs["proprio"] - i_z_obs["proprio"]).item()
 
         logs.update({
