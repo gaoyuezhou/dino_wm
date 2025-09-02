@@ -3,6 +3,9 @@ from pathlib import Path
 import torch
 from torch import nn, optim
 from torch.utils.data import DataLoader
+import hydra
+from omegaconf import OmegaConf
+
 
 from datasets.rearrange_dset import load_rearrange_slice_train_val
 from datasets.img_transforms import default_transform
@@ -10,12 +13,36 @@ from models.visual_world_model import VWorldModel
 
 
 def build_world_model(ckpt_path: str, img_size: int, num_hist: int, num_pred: int):
+    
+    ckpt_path = Path(ckpt_path)
     ckpt = torch.load(ckpt_path, map_location="cpu")
+    cfg = None
+    hydra_cfg_path = ckpt_path.parent.parent / "hydra.yaml"
+    if ("encoder" not in ckpt or "action_encoder" not in ckpt or "proprio_encoder" not in ckpt) and hydra_cfg_path.exists():
+        cfg = OmegaConf.load(hydra_cfg_path)
+
+    encoder = ckpt.get("encoder")
+    if encoder is None:
+        if cfg is None:
+            raise KeyError("encoder not found in checkpoint and no hydra config available")
+        encoder = hydra.utils.instantiate(cfg.encoder)
+
+    proprio_encoder = ckpt.get("proprio_encoder")
+    if proprio_encoder is None:
+        if cfg is None:
+            raise KeyError("proprio_encoder missing and no hydra config available")
+        proprio_encoder = hydra.utils.instantiate(cfg.proprio_encoder)
+
+    action_encoder = ckpt.get("action_encoder")
+    if action_encoder is None:
+        if cfg is None:
+            raise KeyError("action_encoder missing and no hydra config available")
+        action_encoder = hydra.utils.instantiate(cfg.action_encoder)
     wm = VWorldModel(
         image_size=img_size,
         num_hist=num_hist,
         num_pred=num_pred,
-        encoder=ckpt["encoder"],
+        encoder=encoder,
         proprio_encoder=ckpt["proprio_encoder"],
         action_encoder=ckpt["action_encoder"],
         decoder=None,
@@ -136,8 +163,8 @@ def train_classifier(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ckpt", type=str, default="checkpoints/model_latest.pth")
-    parser.add_argument("--data_path", type=str, default=str(Path.home() / "rearrange_1k"))
+    parser.add_argument("--ckpt", type=str, default="/content/drive/MyDrive/Model_checkpoints/2025-08-31/17-26-19/checkpoints/model_latest.pth")
+    parser.add_argument("--data_path", type=str, default="/content/rearrange_2000")
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--lr", type=float, default=1e-3)
