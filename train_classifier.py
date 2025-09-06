@@ -79,16 +79,40 @@ def build_world_model(
     wm.eval()  # we only encode with it
     return wm
 
+def prepare_dataloaders(
+    batch_size: int,
+    data_path: str,
+    n_rollout: int,
+    num_workers: int,
+    img_size: int = 224,
+) -> Tuple[DataLoader, DataLoader, int]:
+    """Build train/val dataloaders for the classifier."""
 
-def prepare_dataloaders(batch_size: int, data_path: str, n_rollout: int, num_workers: int) -> Tuple[DataLoader, DataLoader, int]:
-    train_set, val_set, num_actions = load_rearrange_slice_train_val(
-        data_root=data_path,
-        transform=default_transform,
+    transform = default_transform(img_size)
+    datasets, _ = load_rearrange_slice_train_val(
+        data_path=data_path,
+        transform=transform,
         n_rollout=n_rollout,
     )
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=num_workers, drop_last=False)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False, num_workers=num_workers, drop_last=False)
-    return train_loader, val_loader, num_actions
+    train_set = datasets["train"]
+    val_set = datasets["valid"]
+    all_actions = train_set.dataset.get_all_actions().long().view(-1)
+    num_actions = int(all_actions.unique().numel())
+    train_loader = DataLoader(
+        train_set,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        drop_last=False,
+    )
+    val_loader = DataLoader(
+        val_set,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        drop_last=False,
+    )
+    return train_loader, val_loader, 6
 
 
 # -----------------------------
