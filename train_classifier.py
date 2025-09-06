@@ -21,6 +21,8 @@ from datasets.rearrange_dset import load_rearrange_slice_train_val
 from datasets.img_transforms import default_transform
 from models.visual_world_model import VWorldModel
 
+from omegaconf import OmegaConf
+from plan import load_model
 
 # -----------------------------
 # Utilities
@@ -44,32 +46,36 @@ def count_parameters(model: nn.Module) -> int:
 # Data / Model builders
 # -----------------------------
 
-def build_world_model(ckpt_path: str, img_size: int, num_hist: int, num_pred: int, device: torch.device) -> VWorldModel:
-    """Build and load the world model from a checkpoint.
-    Tries a few common state_dict layouts for robustness.
-    """
-    wm = VWorldModel(img_size=img_size, num_hist=num_hist, num_pred=num_pred)
-    state = torch.load(ckpt_path, map_location="cpu")
+def build_world_model(
+    ckpt_path: str,
+    img_size: int,
+    num_hist: int,
+    num_pred: int,
+    device: torch.device,
+) -> VWorldModel:
+    """Load a ``VWorldModel`` from a training checkpoint.
 
-    # Heuristics to locate the state_dict
-    if isinstance(state, dict):
-        for key in ["state_dict", "model", "wm", "world_model", "module", "net"]:
-            if key in state and isinstance(state[key], dict):
-                state = state[key]
-                break
-    # If it's been saved via DDP sometimes keys start with 'module.'
-    new_state = {}
-    for k, v in state.items():
-        new_k = k.replace("module.", "") if k.startswith("module.") else k
-        new_state[new_k] = v
+    This utility expects ``ckpt_path`` to point to a file inside a training
+    output directory produced by ``train.py``.  The corresponding Hydra
+    configuration (``hydra.yaml``) is loaded to instantiate the model with the
+    correct encoder/decoder components before restoring the checkpointed
+    weights.
 
-    missing, unexpected = wm.load_state_dict(new_state, strict=False)
-    if missing:
-        print(f"[build_world_model] Missing keys: {len(missing)} (showing first 10): {missing[:10]}")
-    if unexpected:
-        print(f"[build_world_model] Unexpected keys: {len(unexpected)} (showing first 10): {unexpected[:10]}")
+    The ``img_size``, ``num_hist`` and ``num_pred`` arguments are kept for
+    backward compatibility but override the values in the loaded config if
+    provided."""
 
-    wm.to(device)
+    ckpt_path = Path(ckpt_path)
+    cfg_path = ckpt_path.parent.parent / "hydra.yaml"
+    if not cfg_path.exists():
+        raise FileNotFoundError(f"Hydra config not found at {cfg_path}")
+
+    cfg = OmegaConf.load(cfg_path)
+    cfg.img_size = img_size
+    cfg.num_hist = num_hist
+    cfg.num_pred = num_pred
+
+    wm = load_model(ckpt_path, cfg, getattr(cfg, "num_action_repeat", 1), device=device)
     wm.eval()  # we only encode with it
     return wm
 
@@ -371,7 +377,7 @@ def train_classifier(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # World model (inverse projector comes from wm.encode_act)
-    wm = build_world_model(args.ckpt, args.img_size, args.num_hist, args.num_pred, device)
+    wm = build_world_model(args.ckpt,args.image_size,args.num_hist, args.num_pred, device)
 
     # Data
     train_loader, val_loader, num_actions = prepare_dataloaders(
@@ -480,7 +486,7 @@ if __name__ == "__main__":
     parser.add_argument("--cosine_decay", action="store_true")
 
     # World model encoder config
-    parser.add_argument("--img_size", type=int, default=224)
+    parser.add_argument("--image_size", type=int, default=224)
     parser.add_argument("--num_hist", type=int, default=3)
     parser.add_argument("--num_pred", type=int, default=1)
 
