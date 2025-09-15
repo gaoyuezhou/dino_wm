@@ -3,6 +3,7 @@ import torch.nn as nn
 from torchvision import transforms
 from einops import rearrange, repeat
 from .inverse_dynamics import InverseDynamicsProjector
+from .inverse_mlp import InverseMLP
 
 class VWorldModel(nn.Module):
     def __init__(
@@ -162,8 +163,12 @@ class VWorldModel(nn.Module):
         align embeddings so index t gets a_{t+1}, pad last with a_{T-1}.
         """
         # Inverse path: obs_emb is (B,T,1,Cv) or similar per-frame embedding
-        if isinstance(self.action_encoder, InverseDynamicsProjector) and obs_emb is not None:
-            a = self.action_encoder(obs_emb)          # (B,T,1,Za)
+        if isinstance(self.action_encoder, (InverseDynamicsProjector, InverseMLP)) and obs_emb is not None:
+            out = self.action_encoder(obs_emb)
+            if isinstance(out, tuple):
+                a, extra = out
+            else:
+                a, extra = out, {}
             if a.dim() != 4 or a.shape[2] != 1:
                 raise ValueError(f"inverse action head must return (B,T,1,Za), got {tuple(a.shape)}")
 
@@ -174,7 +179,10 @@ class VWorldModel(nn.Module):
             a = self.action_dropout(a)
             if self.action_noise_sigma > 0 and self.training:
                 a = a + torch.randn_like(a) * self.action_noise_sigma
-            return a, {"a": a, "a_raw": a_raw}
+            aux = {"a": a, "a_raw": a_raw}
+            if isinstance(extra, dict):
+                aux.update(extra)
+            return a, aux
 
         # Proprio (or other direct) path: encoder likely returns (B,T,Za)
         a = self.action_encoder(act)                  # (B,T,Za) or (B,T,1,Za)
@@ -303,6 +311,11 @@ class VWorldModel(nn.Module):
             var_pen = self.lambda_var * ((var - self.var_target) ** 2).mean()
             loss = loss + var_pen
             loss_components["action_variance"] = var_pen
+
+        vq_loss = aux_act.get("vq_loss") if isinstance(aux_act, dict) else None
+        if vq_loss is not None:
+            loss = loss + vq_loss
+            loss_components["action_vq_loss"] = vq_loss
         z_src = z[:, : self.num_hist, :, :]  # (b, num_hist, num_patches, dim)
         z_tgt = z[:, self.num_pred :, :, :]  # (b, num_hist, num_patches, dim)
         visual_src = obs['visual'][:, : self.num_hist, ...]  # (b, num_hist, 3, img_size, img_size)

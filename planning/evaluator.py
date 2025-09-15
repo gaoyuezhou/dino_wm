@@ -13,6 +13,7 @@ from utils import (
 )
 from torchvision import utils
 from models.inverse_dynamics import InverseDynamicsProjector
+from models.inverse_mlp import InverseMLP
 
 class PlanEvaluator:  # evaluator for planning
     def __init__(
@@ -106,7 +107,7 @@ class PlanEvaluator:  # evaluator for planning
         )
         with torch.no_grad():
             wm_actions = actions
-            if isinstance(self.wm.action_encoder, InverseDynamicsProjector):
+            if isinstance(self.wm.action_encoder, (InverseDynamicsProjector, InverseMLP)):
                 if wm_actions.dim() == 3:
                     wm_actions = wm_actions.unsqueeze(2)
                 elif wm_actions.dim() == 4 and wm_actions.shape[2] == 1:

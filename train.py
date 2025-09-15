@@ -23,6 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from metrics.image_metrics import eval_images
 from utils import slice_trajdict_with_t, cfg_to_dict, seed, sample_tensors
 from models.inverse_dynamics import InverseDynamicsProjector
+from models.inverse_mlp import InverseMLP
 warnings.filterwarnings("ignore")
 log = logging.getLogger(__name__)
 
@@ -240,11 +241,14 @@ class Trainer:
             # pick up the dim from the instance (fallback to cfg)
             action_emb_dim = getattr(self.action_encoder, "emb_dim", self.cfg.action_emb_dim)
 
-        elif target == "models.inverse_dynamics.InverseDynamicsProjector":
+        elif target in [
+            "models.inverse_dynamics.InverseDynamicsProjector",
+            "models.inverse_mlp.InverseMLP",
+        ]:
             # only build if nothing came from the checkpoint
             if getattr(self, "action_encoder", None) is None:
                 self.action_encoder = hydra.utils.instantiate(self.cfg.action_encoder)
-            # projector’s own output size (your config uses 1)
+            # projector’s own output size
             action_emb_dim = getattr(self.action_encoder, "output_dim", 1)
 
         else:
@@ -710,7 +714,10 @@ class Trainer:
                 max_horizon_data = (obs["visual"].shape[0] - start - 1) // self.cfg.frameskip
 
                 # if inverse projector is used, also respect its block_size (we pass horizon+1 obs)
-                use_inverse = isinstance(self.model.action_encoder, InverseDynamicsProjector)
+                use_inverse = isinstance(
+                    self.model.action_encoder,
+                    (InverseDynamicsProjector, InverseMLP),
+                )
                 if use_inverse:
                     block_size = getattr(self.model.action_encoder, "block_size", None)
                     if block_size is not None:

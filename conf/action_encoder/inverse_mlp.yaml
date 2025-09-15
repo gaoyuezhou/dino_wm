@@ -1,0 +1,9 @@
+_target_: models.inverse_mlp.InverseMLP
+input_dim: 384
+hidden_dim1: 256
+hidden_dim2: 128
+output_dim: 16
+dropout: 0.2
+n_embed: 8
+decay: 0.99
+commitment_cost: 0.25

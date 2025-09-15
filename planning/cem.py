@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from .base_planner import BasePlanner
 from utils import move_to_device
 from models.inverse_dynamics import InverseDynamicsProjector
+from models.inverse_mlp import InverseMLP
 
 
 class CEMPlanner(BasePlanner):
@@ -109,7 +110,7 @@ class CEMPlanner(BasePlanner):
                 with torch.no_grad():
                     wm_action = (
                         action.unsqueeze(2)
-                        if isinstance(self.wm.action_encoder, InverseDynamicsProjector)
+                        if isinstance(self.wm.action_encoder, (InverseDynamicsProjector, InverseMLP))
                         else action
                     )
                     i_z_obses, _ = self.wm.rollout(

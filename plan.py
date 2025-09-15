@@ -23,6 +23,7 @@ from custom_resolvers import replace_slash
 from preprocessor import Preprocessor
 from planning.evaluator import PlanEvaluator
 from models.inverse_dynamics import InverseDynamicsProjector
+from models.inverse_mlp import InverseMLP
 from utils import cfg_to_dict, seed
 import pyglet
 pyglet.options["headless"] = True
@@ -142,7 +143,7 @@ class PlanWorkspace:
         self.goal_source = cfg_dict["goal_source"]
         self.goal_H = cfg_dict["goal_H"]
         #self.action_dim = self.dset.action_dim * self.frameskip
-        use_inverse = isinstance(wm.action_encoder, InverseDynamicsProjector)
+        use_inverse = isinstance(wm.action_encoder, (InverseDynamicsProjector, InverseMLP))
         if use_inverse:
             self.action_dim = wm.action_encoder.output_dim
         else:
