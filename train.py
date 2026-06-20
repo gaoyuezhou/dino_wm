@@ -289,9 +289,15 @@ class Trainer:
             if not self.train_decoder:
                 for param in self.decoder.parameters():
                     param.requires_grad = False
-        self.encoder, self.predictor, self.decoder = self.accelerator.prepare(
-            self.encoder, self.predictor, self.decoder
-        )
+        if self.train_encoder:
+            self.encoder, self.predictor, self.decoder = self.accelerator.prepare(
+                self.encoder, self.predictor, self.decoder
+            )
+        else:
+            self.predictor, self.decoder = self.accelerator.prepare(
+                self.predictor, self.decoder
+            )
+            self.encoder = self.encoder.to(self.accelerator.device)
         self.model = hydra.utils.instantiate(
             self.cfg.model,
             encoder=self.encoder,
@@ -794,8 +800,6 @@ class Trainer:
 
         if self.accelerator.is_main_process:
             os.makedirs(phase, exist_ok=True)
-        self.accelerator.wait_for_everyone()
-
         self.plot_imgs(
             imgs,
             num_columns=num_samples * num_frames,
