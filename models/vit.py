@@ -55,7 +55,15 @@ class Attention(nn.Module):
             nn.Linear(inner_dim, dim),
             nn.Dropout(dropout)
         ) if project_out else nn.Identity()
-        self.bias = generate_mask_matrix(NUM_PATCHES, NUM_FRAMES).to('cuda')
+        # Keep the causal mask with the module instead of pinning it to the
+        # default CUDA device.  Registering it as a non-persistent buffer makes
+        # `.to(device)` and DDP placement work while preserving compatibility
+        # with checkpoints created before the mask was registered.
+        self.register_buffer(
+            "bias",
+            generate_mask_matrix(NUM_PATCHES, NUM_FRAMES),
+            persistent=False,
+        )
 
     def forward(self, x):
         (
