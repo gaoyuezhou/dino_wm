@@ -74,7 +74,8 @@ class CEMPlanner(BasePlanner):
         trans_obs_g = move_to_device(
             self.preprocessor.transform_obs(obs_g), self.device
         )
-        z_obs_g = self.wm.encode_obs(trans_obs_g)
+        with torch.inference_mode():
+            z_obs_g = self.wm.encode_obs(trans_obs_g)
 
         mu, sigma = self.init_mu_sigma(obs_0, actions)
         mu, sigma = mu.to(self.device), sigma.to(self.device)
