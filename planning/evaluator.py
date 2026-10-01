@@ -129,16 +129,45 @@ class PlanEvaluator:  # evaluator for planning
 
         # plot trajs
         if self.wm.decoder is not None:
-            i_visuals = self.wm.decode_obs(i_z_obses)[0]["visual"]
+
+            # Only decode trajectories that will actually be plotted.
+            # Example: n_evals=50, n_plot_samples=10 -> decode only 10.
+            n_plot = min(self.n_plot_samples, actions.shape[0])
+
+            plot_i_z_obses = {
+                key: value[:n_plot]
+                for key, value in i_z_obses.items()
+            }
+
+            plot_action_len = action_len[:n_plot]
+
+            # No gradients are needed during planning/evaluation.
+            with torch.inference_mode():
+                i_visuals = self.wm.decode_obs(
+                    plot_i_z_obses
+                )[0]["visual"]
+
             i_visuals = self._mask_traj(
-                i_visuals, action_len + 1
-            )  # we have action_len + 1 states
-            e_visuals = self.preprocessor.transform_obs_visual(e_visuals)
-            e_visuals = self._mask_traj(e_visuals, action_len * self.frameskip + 1)
+                i_visuals,
+                plot_action_len + 1
+            )
+
+            # Only process environment visuals that will be plotted.
+            e_visuals_plot = e_visuals[:n_plot]
+
+            e_visuals_plot = self.preprocessor.transform_obs_visual(
+                e_visuals_plot
+            )
+
+            e_visuals_plot = self._mask_traj(
+                e_visuals_plot,
+                plot_action_len * self.frameskip + 1
+            )
+
             self._plot_rollout_compare(
-                e_visuals=e_visuals,
+                e_visuals=e_visuals_plot,
                 i_visuals=i_visuals,
-                successes=successes,
+                successes=successes[:n_plot],
                 save_video=save_video,
                 filename=filename,
             )
@@ -171,10 +200,11 @@ class PlanEvaluator:  # evaluator for planning
         proprio_dists = np.linalg.norm(e_obs["proprio"] - self.obs_g["proprio"], axis=1)
         mean_proprio_dist = np.mean(proprio_dists)
 
-        e_obs = move_to_device(self.preprocessor.transform_obs(e_obs), self.device)
-        e_z_obs = self.wm.encode_obs(e_obs)
-        div_visual_emb = torch.norm(e_z_obs["visual"] - i_z_obs["visual"]).item()
-        div_proprio_emb = torch.norm(e_z_obs["proprio"] - i_z_obs["proprio"]).item()
+        with torch.inference_mode():
+            e_obs = move_to_device(self.preprocessor.transform_obs(e_obs), self.device)
+            e_z_obs = self.wm.encode_obs(e_obs)
+            div_visual_emb = torch.norm(e_z_obs["visual"] - i_z_obs["visual"]).item()
+            div_proprio_emb = torch.norm(e_z_obs["proprio"] - i_z_obs["proprio"]).item()
 
         logs.update({
             "mean_visual_dist": mean_visual_dist,
@@ -194,8 +224,6 @@ class PlanEvaluator:  # evaluator for planning
         i_visuals: (b, t, h, w, c)
         goal: (b, h, w, c)
         """
-        e_visuals = e_visuals[: self.n_plot_samples]
-        i_visuals = i_visuals[: self.n_plot_samples]
         goal_visual = self.obs_g["visual"][: self.n_plot_samples]
         goal_visual = self.preprocessor.transform_obs_visual(goal_visual)
 
