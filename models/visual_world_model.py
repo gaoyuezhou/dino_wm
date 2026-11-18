@@ -52,7 +52,12 @@ class VWorldModel(nn.Module):
         assert concat_dim == 0 or concat_dim == 1, f"concat_dim {concat_dim} not supported."
         print("Model emb_dim: ", self.emb_dim)
 
-        if "dino" in self.encoder.name:
+        # Patch encoders (DINOv2, random ViT, salt student) must output the
+        # (img_size // 16)^2 patch grid the predictor and decoder are built for,
+        # so the input is resized to num_side_patches * patch_size. Keyed on
+        # patch_size rather than the encoder name: "vits14_random" has no "dino"
+        # in its name but is the same ViT-S/14 and needs the same resize.
+        if getattr(encoder, "latent_ndim", None) == 2 and hasattr(encoder, "patch_size"):
             decoder_scale = 16  # from vqvae
             num_side_patches = image_size // decoder_scale
             self.encoder_image_size = num_side_patches * encoder.patch_size

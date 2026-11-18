@@ -430,18 +430,27 @@ class DummyWandbRun:
 def planning_main(cfg_dict):
     output_dir = cfg_dict["saved_folder"]
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    if cfg_dict["wandb_logging"]:
-        wandb_run = wandb.init(
-            project=f"plan_{cfg_dict['planner']['name']}", config=cfg_dict
-        )
-        wandb.run.name = "{}".format(output_dir.split("plan_outputs/")[-1])
-    else:
-        wandb_run = None
 
     ckpt_base_path = cfg_dict["ckpt_base_path"]
     model_path = f"{ckpt_base_path}/outputs/{cfg_dict['model_name']}/"
     with open(os.path.join(model_path, "hydra.yaml"), "r") as f:
         model_cfg = OmegaConf.load(f)
+
+    if cfg_dict["wandb_logging"]:
+        # e.g. plan_dinov2_vits14_2026-11-02_job_29097248_elatest_mpc_cem_gH5
+        encoder_name = model_cfg.encoder.get("name", "encoder")
+        model_tag = replace_slash(cfg_dict["model_name"])
+        run_name = (
+            f"plan_{encoder_name}_{model_tag}_e{cfg_dict['model_epoch']}"
+            f"_{cfg_dict['planner']['name']}_gH{cfg_dict['goal_H']}"
+        )
+        wandb_config = dict(cfg_dict)
+        wandb_config["plan_output_dir"] = output_dir.split("plan_outputs/")[-1]
+        wandb_config["train_wandb_run_id"] = model_cfg.get("wandb_run_id", None)
+        wandb_config["train_encoder_name"] = encoder_name
+        wandb_run = wandb.init(project="dino_wm", config=wandb_config, name=run_name)
+    else:
+        wandb_run = None
 
     seed(cfg_dict["seed"])
     _, dset = hydra.utils.call(

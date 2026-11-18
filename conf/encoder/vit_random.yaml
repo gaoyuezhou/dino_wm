@@ -1,0 +1,8 @@
+# Randomly initialised ViT-S/14 with the DINOv2 architecture, frozen (model.train_encoder=False).
+# Baseline for the frozen DINOv2 (encoder=dino) and salt student (encoder=vjepa_student) encoders.
+_target_: models.dino.DinoV2Encoder
+name: "vits14_random"
+hub_model: "dinov2_vits14"
+feature_key: "x_norm_patchtokens"
+pretrained: False
+init_seed: 0

@@ -37,7 +37,7 @@ Append the following lines to your `~/.bashrc`:
 
 ```bash
 # Mujoco Path. Replace `<username>` with your actual username if necessary.
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/<username>/.mujoco/mujoco210/bin
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/home/sd6701/.mujoco/mujoco210/bin
 
 # NVIDIA Library Path (if using NVIDIA GPUs)
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/lib/nvidia

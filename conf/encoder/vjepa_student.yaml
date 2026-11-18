@@ -1,0 +1,4 @@
+_target_: models.vjepa_student.VJEPAStudentEncoder
+name: "vjepa_student_vits16"
+checkpoint_path: /gpfs/scratch/sd6701/personal/salt/p-salt/results/student_ssv2_causal_framelocal_flex_tube1/checkpoints/4133afc0/last/checkpoint.pth
+repo_path: /gpfs/scratch/sd6701/personal/salt/p-salt

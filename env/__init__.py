@@ -1,5 +1,6 @@
 from gym.envs.registration import register
-from .pointmaze import U_MAZE
+# Copied from env/pointmaze/maze_model.py: importing it here would load mujoco_py for every env.
+U_MAZE = "#####\\#GOO#\\###O#\\#OOO#\\#####"
 register(
     id="pusht",
     entry_point="env.pusht.pusht_wrapper:PushTWrapper",
